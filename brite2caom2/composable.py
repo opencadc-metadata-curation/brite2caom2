@@ -81,10 +81,10 @@ import sys
 import traceback
 
 from caom2pipe import run_composable as rc
-from blank2caom2 import fits2caom2_augmentation
+from brite2caom2 import fits2caom2_augmentation
 
 
-BLANK_BOOKMARK = 'blank_timestmap'
+BRITE_BOOKMARK = 'brite_timestmap'
 META_VISITORS = [fits2caom2_augmentation]
 DATA_VISITORS = []
 
@@ -124,7 +124,7 @@ def _run_state():
     return rc.run_by_state_ts(
         config=None, 
         name_builder=None,
-        bookmark_name=BLANK_BOOKMARK,
+        bookmark_name=BRITE_BOOKMARK,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS, 
         end_time=None,

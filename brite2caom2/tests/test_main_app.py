@@ -69,7 +69,7 @@
 
 from mock import patch
 
-from blank2caom2 import fits2caom2_augmentation, main_app
+from brite2caom2 import fits2caom2_augmentation, main_app
 from caom2.diff import get_differences
 from caom2pipe import astro_composable as ac
 from caom2pipe import manage_composable as mc
@@ -91,7 +91,7 @@ def pytest_generate_tests(metafunc):
 @patch('caom2utils.data_util.get_local_headers_from_fits')
 def test_main_app(header_mock, test_name):
     header_mock.side_effect = ac.make_headers_from_file
-    storage_name = main_app.BlankName(entry=test_name)
+    storage_name = main_app.BriteName(entry=test_name)
     metadata_reader = rdc.FileMetadataReader()
     metadata_reader.set(storage_name)
     file_type = 'application/fits'
