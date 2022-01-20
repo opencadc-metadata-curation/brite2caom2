@@ -49,7 +49,7 @@ RUN git clone https://github.com/${CAOM2_REPO}/caom2tools.git && \
 
 RUN pip install git+https://github.com/${OPENCADC_REPO}/caom2pipe@${OPENCADC_BRANCH}#egg=caom2pipe
   
-RUN pip install git+https://github.com/${PIPE_REPO}/blank2caom2@${PIPE_BRANCH}#egg=blank2caom2
+RUN pip install git+https://github.com/${PIPE_REPO}/brite2caom2@${PIPE_BRANCH}#egg=brite2caom2
 
 
 RUN useradd --create-home --shell /bin/bash cadcops
