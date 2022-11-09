@@ -125,11 +125,8 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
                 )
                 if self._cleanup_when_storing:
                     self._move_action(fqn, self._cleanup_failure_directory)
-                self._capture_failure(
-                    BriteLocalFilesDataSource._get_obs_id_from_fqn(fqn),
-                    basename(fqn),
-                    datetime.utcnow().timestamp(),
-                )
+                temp_storage_name = BriteName(entry=fqn)
+                self._capture_failure(temp_storage_name, BaseException('manifest errors'), 'manifest errors')
                 self._work.remove(fqn)
 
     def clean_up(self, entry, execution_result, current_count):

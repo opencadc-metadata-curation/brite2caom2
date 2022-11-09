@@ -29,7 +29,7 @@ cleanup_failure_destination: /data/failure
 cleanup_success_destination: /data/success
 store_modified_files_only: True
 storage_inventory_resource_id: ivo://cadc.nrc.ca/cadc/minoc
-recurse_data_sources: False
+recurse_data_sources: True
 # values True False
 # when True, the application will look for files with
 # .fits, .gz, .json endings as defining the work to be 
@@ -61,7 +61,7 @@ retry_file_name: retries.txt
 # this file is created in the logs directory, default is 'progress.txt'
 progress_file_name: progress.txt
 #
-collection: BRITE
+collection: BRITE-Constellation
 #
 # CADC service execution metrics
 #
