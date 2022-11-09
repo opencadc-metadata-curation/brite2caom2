@@ -119,3 +119,4 @@ class BriteFits2caom2Visitor(cc.Fits2caom2Visitor):
 
 def visit(observation, **kwargs):
     return BriteFits2caom2Visitor(observation, **kwargs).visit()
+
