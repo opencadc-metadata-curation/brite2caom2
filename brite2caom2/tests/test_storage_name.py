@@ -1,0 +1,115 @@
+# -*- coding: utf-8 -*-
+# ***********************************************************************
+# ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
+# *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
+#
+#  (c) 2019.                            (c) 2019.
+#  Government of Canada                 Gouvernement du Canada
+#  National Research Council            Conseil national de recherches
+#  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
+#  All rights reserved                  Tous droits réservés
+#
+#  NRC disclaims any warranties,        Le CNRC dénie toute garantie
+#  expressed, implied, or               énoncée, implicite ou légale,
+#  statutory, of any kind with          de quelque nature que ce
+#  respect to the software,             soit, concernant le logiciel,
+#  including without limitation         y compris sans restriction
+#  any warranty of merchantability      toute garantie de valeur
+#  or fitness for a particular          marchande ou de pertinence
+#  purpose. NRC shall not be            pour un usage particulier.
+#  liable in any event for any          Le CNRC ne pourra en aucun cas
+#  damages, whether direct or           être tenu responsable de tout
+#  indirect, special or general,        dommage, direct ou indirect,
+#  consequential or incidental,         particulier ou général,
+#  arising from the use of the          accessoire ou fortuit, résultant
+#  software.  Neither the name          de l'utilisation du logiciel. Ni
+#  of the National Research             le nom du Conseil National de
+#  Council of Canada nor the            Recherches du Canada ni les noms
+#  names of its contributors may        de ses  participants ne peuvent
+#  be used to endorse or promote        être utilisés pour approuver ou
+#  products derived from this           promouvoir les produits dérivés
+#  software without specific prior      de ce logiciel sans autorisation
+#  written permission.                  préalable et particulière
+#                                       par écrit.
+#
+#  This file is part of the             Ce fichier fait partie du projet
+#  OpenCADC project.                    OpenCADC.
+#
+#  OpenCADC is free software:           OpenCADC est un logiciel libre ;
+#  you can redistribute it and/or       vous pouvez le redistribuer ou le
+#  modify it under the terms of         modifier suivant les termes de
+#  the GNU Affero General Public        la “GNU Affero General Public
+#  License as published by the          License” telle que publiée
+#  Free Software Foundation,            par la Free Software Foundation
+#  either version 3 of the              : soit la version 3 de cette
+#  License, or (at your option)         licence, soit (à votre gré)
+#  any later version.                   toute version ultérieure.
+#
+#  OpenCADC is distributed in the       OpenCADC est distribué
+#  hope that it will be useful,         dans l’espoir qu’il vous
+#  but WITHOUT ANY WARRANTY;            sera utile, mais SANS AUCUNE
+#  without even the implied             GARANTIE : sans même la garantie
+#  warranty of MERCHANTABILITY          implicite de COMMERCIALISABILITÉ
+#  or FITNESS FOR A PARTICULAR          ni d’ADÉQUATION À UN OBJECTIF
+#  PURPOSE.  See the GNU Affero         PARTICULIER. Consultez la Licence
+#  General Public License for           Générale Publique GNU Affero
+#  more details.                        pour plus de détails.
+#
+#  You should have received             Vous devriez avoir reçu une
+#  a copy of the GNU Affero             copie de la Licence Générale
+#  General Public License along         Publique GNU Affero avec
+#  with OpenCADC.  If not, see          OpenCADC ; si ce n’est
+#  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
+#                                       <http://www.gnu.org/licenses/>.
+#
+#  $Revision: 4 $
+#
+# ***********************************************************************
+#
+
+from caom2pipe import manage_composable as mc
+from brite2caom2 import COLLECTION
+from brite2caom2.storage_name import BriteName
+
+
+def test_is_valid():
+    assert BriteName('anything').is_valid()
+
+
+def test_storage_name():
+    mc.StorageName.collection = COLLECTION
+    original_scheme = mc.StorageName.scheme
+    mc.StorageName.scheme = 'cadc'
+    try:
+        test_obs_id = 'HD31237_01-Ori-I-2013_BAb_setup3_APa2s5_DR2'
+        test_f_name_1 = f'{test_obs_id}.orig'
+        test_f_name_2 = f'{test_obs_id}.avedb'
+        test_uri_1 = f'cadc:{COLLECTION}/{test_f_name_1}'
+        test_uri_2 = f'cadc:{COLLECTION}/{test_f_name_2}'
+        for entry in [
+            test_f_name_1,
+            test_f_name_2,
+            test_uri_1,
+            test_uri_2,
+            f'https://localhost:8020/{test_f_name_1}',
+            f'https://localhost:8020/{test_f_name_2}',
+            f'vos:goliaths/brite/{test_f_name_1}',
+            f'vos:goliaths/brite/{test_f_name_2}',
+        ]:
+            test_subject = BriteName(entry)
+            assert test_subject.obs_id == test_obs_id, 'wrong obs id'
+            if test_subject.has_undecorrelated_metadata:
+                assert test_subject.product_id == 'un-decorrelated', 'wrong product id'
+                assert test_subject.source_names == [entry], 'wrong source names'
+                assert (
+                    test_subject.destination_uris == [f'cadc:{COLLECTION}/{test_subject.file_name}']
+                ), f'wrong uris {test_subject}'
+            else:
+                assert test_subject.product_id == 'decorrelated', 'wrong product id'
+                assert test_subject.source_names == [entry], f'wrong source names {test_subject.source_names}'
+                assert (
+                    test_subject.destination_uris == [f'cadc:{COLLECTION}/{test_subject.file_name}']
+                ), f'wrong decorrelated uris {test_subject.destination_uris}'
+    finally:
+        mc.StorageName.collection = None
+        mc.StorageName.scheme = original_scheme
