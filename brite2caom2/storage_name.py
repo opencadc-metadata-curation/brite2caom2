@@ -89,11 +89,11 @@ class BriteName(StorageName):
 
     @property
     def average_uri(self):
-        return self._get_uri(f'{self._obs_id}.avedb')
+        return self._get_uri(f'{self._obs_id}.avedb', StorageName.scheme)
 
     @property
     def decorrelated_uri(self):
-        return self._get_uri(f'{self._obs_id}.ndatdb')
+        return self._get_uri(f'{self._obs_id}.ndatdb', StorageName.scheme)
 
     @property
     def has_decorrelated_metadata(self):
@@ -138,7 +138,7 @@ class BriteName(StorageName):
         :return:
         """
         new_fqn = self._source_names[0].replace(original_extension, new_extension)
-        new_uri = self._get_uri(basename(new_fqn))
+        new_uri = self._get_uri(basename(new_fqn), StorageName.scheme)
         return new_fqn, new_uri
 
     def set_file_id(self):

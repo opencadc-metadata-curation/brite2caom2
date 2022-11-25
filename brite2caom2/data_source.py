@@ -90,10 +90,9 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
 
     def __init__(self, config, cadc_client, metadata_reader, recursive):
         super().__init__(config, cadc_client, metadata_reader, recursive)
-        self._extensions = config.data_source_extensions
         self._correct_listing_length = 0
 
-    def _check_file(self, fqn):
+    def _verify_file(self, fqn):
         """As of now, there are no checks of file content in addition to what is already done by the MetadataReader
         specialization, which is why the function is returning the default value of 'the file is good to store'."""
         return True
@@ -126,7 +125,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
                 if self._cleanup_when_storing:
                     self._move_action(fqn, self._cleanup_failure_directory)
                 temp_storage_name = BriteName(entry=fqn)
-                self._capture_failure(temp_storage_name, BaseException('manifest errors'), 'manifest errors')
+                self._reporter.capture_failure(temp_storage_name, BaseException('manifest errors'), 'manifest errors')
                 self._work.remove(fqn)
 
     def clean_up(self, entry, execution_result, current_count):
@@ -136,7 +135,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
             # avoid the check for the presence of the file in CADC storage prior to picking a clean up destination.
             if self._cleanup_when_storing:
                 self._move_action(entry, self._cleanup_success_directory)
-                self._capture_success(
+                self._reporter.capture_success(
                     BriteLocalFilesDataSource._get_obs_id_from_fqn(entry),
                     basename(entry),
                     datetime.utcnow().timestamp(),
@@ -159,7 +158,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
                 if self._cleanup_when_storing:
                     self._move_action(entry, self._cleanup_success_directory)
                 remove_these.append(entry)
-                self._capture_success(
+                self._reporter.capture_success(
                     BriteLocalFilesDataSource._get_obs_id_from_fqn(entry),
                     basename(entry),
                     datetime.utcnow().timestamp(),

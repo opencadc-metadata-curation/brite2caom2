@@ -74,7 +74,7 @@ from caom2pipe.caom_composable import get_all_artifact_keys
 from caom2pipe import manage_composable as mc
 
 import brite2caom2.storage_name
-from brite2caom2 import preview_augmentation, main_app, reader
+from brite2caom2 import preview_augmentation, reader
 from mock import Mock, patch
 import test_main_app
 
@@ -85,42 +85,37 @@ def pytest_generate_tests(metafunc):
 
 
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_preview_visit(clients_mock, test_name):
-    original_collection = mc.StorageName.collection
-    try:
-        obs_id = basename(test_name).replace('.expected.xml', '')
-        dir_name = obs_id.split('_')[0]
-        rlog_fqn = f'{test_main_app.TEST_DATA_DIR}/{dir_name}/{obs_id}.rlogdb'
-        orig_fqn = f'{test_main_app.TEST_DATA_DIR}/{dir_name}/{obs_id}.orig'
-        for test_fqn in [orig_fqn, rlog_fqn]:
-            mc.StorageName.collection = main_app.COLLECTION
-            metadata_reader = reader.BriteFileMetadataReader()
-            test_obs = mc.read_obs_from_file(test_name)
-            # pre-condition
-            uris = get_all_artifact_keys(test_obs)
-            assert len(uris) == 5, f'precondition failure {test_name}'
-            test_storage_name = brite2caom2.storage_name.BriteName(test_fqn)
-            metadata_reader.set(test_storage_name)
-            kwargs = {
-                'working_directory': test_main_app.TEST_DATA_DIR,
-                'cadc_client': None,
-                'metadata_reader': metadata_reader,
-                'observable': Mock(),
-                'storage_name': test_storage_name,
-            }
-            test_obs = preview_augmentation.visit(test_obs, **kwargs)
-            assert test_obs is not None, f'visit broken for {test_name}'
-            uris = get_all_artifact_keys(test_obs)
-            assert len(uris) == 7, f'no preview artifacts added {test_name}'
-            # there's a thumbnail and a preview
-            preview_found = False
-            thumbnail_found = False
-            for uri in uris:
-                if uri.endswith('_prev.jpg'):
-                    preview_found = True
-                if uri.endswith('_prev_256.jpg'):
-                    thumbnail_found = True
-            assert preview_found, f'expect a preview artifact {test_fqn}'
-            assert thumbnail_found, f'expect a thumbnail artifact {test_fqn}'
-    finally:
-        mc.StorageName.collection = original_collection
+def test_preview_visit(clients_mock, test_name, test_config):
+    obs_id = basename(test_name).replace('.expected.xml', '')
+    dir_name = obs_id.split('_')[0]
+    rlog_fqn = f'{test_main_app.TEST_DATA_DIR}/{dir_name}/{obs_id}.rlogdb'
+    orig_fqn = f'{test_main_app.TEST_DATA_DIR}/{dir_name}/{obs_id}.orig'
+    for test_fqn in [orig_fqn, rlog_fqn]:
+        metadata_reader = reader.BriteFileMetadataReader()
+        test_obs = mc.read_obs_from_file(test_name)
+        # pre-condition
+        uris = get_all_artifact_keys(test_obs)
+        assert len(uris) == 5, f'precondition failure {test_name}'
+        test_storage_name = brite2caom2.storage_name.BriteName(test_fqn)
+        metadata_reader.set(test_storage_name)
+        kwargs = {
+            'working_directory': test_main_app.TEST_DATA_DIR,
+            'cadc_client': None,
+            'metadata_reader': metadata_reader,
+            'observable': Mock(),
+            'storage_name': test_storage_name,
+        }
+        test_obs = preview_augmentation.visit(test_obs, **kwargs)
+        assert test_obs is not None, f'visit broken for {test_name}'
+        uris = get_all_artifact_keys(test_obs)
+        assert len(uris) == 7, f'no preview artifacts added {test_name}'
+        # there's a thumbnail and a preview
+        preview_found = False
+        thumbnail_found = False
+        for uri in uris:
+            if uri.endswith('_prev.jpg'):
+                preview_found = True
+            if uri.endswith('_prev_256.jpg'):
+                thumbnail_found = True
+        assert preview_found, f'expect a preview artifact {test_fqn}'
+        assert thumbnail_found, f'expect a thumbnail artifact {test_fqn}'

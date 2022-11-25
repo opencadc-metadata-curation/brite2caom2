@@ -72,13 +72,12 @@ import os
 import test_main_app
 
 from collections import defaultdict
-from mock import Mock, patch
+from mock import patch
 from shutil import copy
-from tempfile import TemporaryDirectory
 
 from caom2utils import data_util
 from caom2pipe import manage_composable as mc
-from brite2caom2 import composable, main_app
+from brite2caom2 import composable
 import test_data_source
 
 
@@ -92,9 +91,9 @@ def test_run_by_state():
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('brite2caom2.composable.ClientCollection')
 @patch('cadcutils.net.ws.WsCapabilities.get_access_url')
-def test_run_local_clean_up(access_mock, client_mock, move_mock):
+def test_run_local_clean_up(access_mock, client_mock, move_mock, test_config, tmp_path):
     access_mock.return_value = 'https://localhost'
-    config = mc.Config()
+    test_config.change_working_directory(tmp_path.as_posix())
 
     # dict to track how many times info has been called for a particular URI
     info_uri_calls = defaultdict(int)
@@ -110,103 +109,99 @@ def test_run_local_clean_up(access_mock, client_mock, move_mock):
     client_mock.return_value.data_client.info.side_effect = _info_mock
 
     test_files = glob.glob(f'{TEST_ROOT_DIR}/*')
-    with TemporaryDirectory(dir=test_main_app.TEST_DATA_DIR) as temp_dir:
-        os.chdir(temp_dir)
-        config.collection = main_app.COLLECTION
-        config.working_directory = temp_dir
-        config.log_file_directory = f'{temp_dir}/logs'
-        config._rejected_directory = f'{temp_dir}/rejected'
-        config.logging_level = 'INFO'
-        config.task_types = [mc.TaskType.STORE, mc.TaskType.INGEST]
-        config.store_modified_files_only = True
-        config.cleanup_files_when_storing = True
-        config.cleanup_failure_destination = f'{temp_dir}/failure'
-        config.cleanup_success_destination = f'{temp_dir}/success'
-        config.retry_failures = False
-        config.log_to_file = True
-        config.use_local_files = True
-        config.data_source_extensions = test_data_source.EXTENSIONS
-        config.data_sources = [TEST_ROOT_DIR]
-        config.features.supports_latest_client = True
-        config.features.supports_decompression = True
-        mc.Config.write_to_file(config)
+    orig_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        test_config.logging_level = 'INFO'
+        test_config.task_types = [mc.TaskType.STORE, mc.TaskType.INGEST]
+        test_config.store_modified_files_only = True
+        test_config.cleanup_files_when_storing = True
+        test_config.cleanup_failure_destination = f'{tmp_path.as_posix()}/failure'
+        test_config.cleanup_success_destination = f'{tmp_path.as_posix()}/success'
+        test_config.retry_failures = False
+        test_config.log_to_file = True
+        test_config.use_local_files = True
+        test_config.data_source_extensions = test_data_source.EXTENSIONS
+        test_config.data_sources = [TEST_ROOT_DIR]
+        test_config.features.supports_latest_client = True
+        test_config.features.supports_decompression = True
+        test_config.proxy_file_name = 'test_proxy.pem'
+        test_config.write_to_file(test_config)
 
         def _meta_read_mock(ignore_collection, obs_id):
             result = None
-            fqn = f'{temp_dir}/logs/{obs_id}.xml'
+            fqn = f'{tmp_path.as_posix()}/logs/{obs_id}.xml'
             if os.path.exists(fqn):
                 result = mc.read_obs_from_file(fqn)
             return result
 
         client_mock.return_value.metadata_client.read.side_effect = _meta_read_mock
 
-        for d in [config.cleanup_failure_destination, config.cleanup_success_destination]:
+        for d in [test_config.cleanup_failure_destination, test_config.cleanup_success_destination]:
             os.mkdir(d)
 
-        with open(f'{temp_dir}/test_proxy.pem', 'w') as f:
+        with open(test_config.proxy_fqn, 'w') as f:
             f.write('test content')
 
         def _move_mock(source, destination):
             # assumes all the move actions for this test are to success
             assert source in test_files, f'unexpected source {source}'
-            assert destination == f'{temp_dir}/success', f'unexpected destination {destination}'
+            assert destination == f'{tmp_path.as_posix()}/success', f'unexpected destination {destination}'
 
         move_mock.side_effect = _move_mock
 
-        try:
-            test_result = composable._run()
-            assert test_result == 0, 'expect success'
-            # 42 files making up 6 observations, 5 files per observation should be stored
-            # two calls per file, one to make sure it's not already stored, and another call after storing to ensure
-            # the file was stored correctly
-            #
-            # 6 * 5 * 2 = 60 calls
-            assert (
-                client_mock.return_value.data_client.info.call_count == 60
-            ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
-            assert client_mock.return_value.data_client.put.called, 'put should be called'
-            # 54 = 30 science files + 24 preview files
-            # 24 preview files => 2 planes per observation, 2 files per plane => 4 files/observation
-            #    6 observations * 4 files = 24 preview files
-            assert client_mock.return_value.data_client.put.call_count == 54, 'put call count'
-            # 30 = once per archived file
-            assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
-            assert client_mock.return_value.metadata_client.create.call_count == 6, 'meta create call count'
-            assert client_mock.return_value.metadata_client.update.call_count == 24, 'meta update call count'
-            prefix = os.path.basename(temp_dir)
-            report_fqn = f'{temp_dir}/logs/{prefix}_report.txt'
-            _check_report_file(report_fqn, 42)
-        finally:
-            os.chdir(test_main_app.TEST_DATA_DIR)
+        test_result = composable._run()
+        assert test_result == 0, 'expect success'
+        # 42 files making up 6 observations, 5 files per observation should be stored
+        # two calls per file, one to make sure it's not already stored, and another call after storing to ensure
+        # the file was stored correctly
+        #
+        # 6 * 5 * 2 = 60 calls
+        assert (
+            client_mock.return_value.data_client.info.call_count == 60
+        ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
+        assert client_mock.return_value.data_client.put.called, 'put should be called'
+        # 54 = 30 science files + 24 preview files
+        # 24 preview files => 2 planes per observation, 2 files per plane => 4 files/observation
+        #    6 observations * 4 files = 24 preview files
+        assert client_mock.return_value.data_client.put.call_count == 54, 'put call count'
+        # 30 = once per archived file
+        assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
+        assert client_mock.return_value.metadata_client.create.call_count == 6, 'meta create call count'
+        assert client_mock.return_value.metadata_client.update.call_count == 24, 'meta update call count'
+        prefix = os.path.basename(tmp_path.as_posix())
+        report_fqn = f'{tmp_path.as_posix()}/logs/{prefix}_report.txt'
+        _check_report_file(report_fqn, 42)
+    finally:
+        os.chdir(orig_cwd)
 
 
-def test_run_scrape():
-    test_config = mc.Config()
-    test_config.collection = main_app.COLLECTION
+def test_run_scrape(test_config, tmp_path):
+    test_config.change_working_directory(tmp_path.as_posix())
     test_config.logging_level = 'INFO'
     test_config.use_local_files = True
     test_config.data_sources = [f'{test_main_app.TEST_DATA_DIR}/HD36486']
     test_config.data_source_extensions = test_data_source.EXTENSIONS
     test_config.task_types = [mc.TaskType.SCRAPE]
-    with TemporaryDirectory(dir=test_main_app.TEST_DATA_DIR) as temp_dir:
-        os.chdir(temp_dir)
-        test_config.log_file_directory = f'{temp_dir}/logs'
+    orig_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path.as_posix())
         mc.Config.write_to_file(test_config)
         test_result = composable._run()
         assert test_result == 0, 'wrong return value'
-        previews = glob.glob(f'{temp_dir}/*/*.jpg')
+        previews = glob.glob(f'{tmp_path.as_posix()}/*/*.jpg')
         assert len(previews) == 36, 'preview generation failed'
-        prefix = os.path.basename(temp_dir)
-        report_fqn = f'{temp_dir}/logs/{prefix}_report.txt'
         # 63 = 7 files * 9 observations
-        _check_report_file(report_fqn, 63)
+        _check_report_file(test_config.report_fqn, 63)
+    finally:
+        os.chdir(orig_cwd)
 
 
 @patch('brite2caom2.composable.ClientCollection')
 @patch('cadcutils.net.ws.WsCapabilities.get_access_url')
-def test_run_reingest_retry(access_mock, client_mock):
+def test_run_reingest_retry(access_mock, client_mock, test_config, tmp_path):
     access_mock.return_value = 'https://localhost'
-    config = mc.Config()
+    test_config.change_working_directory(tmp_path.as_posix())
 
     def _info_mock(uri):
         fqn = f'{TEST_ROOT_DIR}/{os.path.basename(uri)}'
@@ -216,21 +211,19 @@ def test_run_reingest_retry(access_mock, client_mock):
 
     test_files = glob.glob(f'{TEST_ROOT_DIR}/*')
 
-    with TemporaryDirectory(dir=test_main_app.TEST_DATA_DIR) as temp_dir:
-        os.chdir(temp_dir)
-        config.collection = main_app.COLLECTION
-        config.working_directory = temp_dir
-        config.log_file_directory = f'{temp_dir}/logs'
-        config._rejected_directory = f'{temp_dir}/rejected'
-        config.logging_level = 'INFO'
-        config.task_types = [mc.TaskType.MODIFY]
-        config.store_modified_files_only = False
-        config.cleanup_files_when_storing = False
-        config.retry_failures = True
-        config.retry_count = 1
-        mc.Config.write_to_file(config)
+    orig_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        test_config.logging_level = 'INFO'
+        test_config.task_types = [mc.TaskType.MODIFY]
+        test_config.store_modified_files_only = False
+        test_config.cleanup_files_when_storing = False
+        test_config.retry_failures = True
+        test_config.retry_count = 1
+        test_config.proxy_file_name = 'test_proxy.pem'
+        test_config.write_to_file(test_config)
 
-        with open(f'{config.working_directory}/todo.txt', 'w') as f:
+        with open(test_config.work_fqn, 'w') as f:
             for temp in test_files:
                 if '.lst' in temp or '.md5' in temp:
                     continue
@@ -260,28 +253,25 @@ def test_run_reingest_retry(access_mock, client_mock):
 
         client_mock.return_value.metadata_client.read.side_effect = _meta_read_mock
 
-        with open(f'{temp_dir}/test_proxy.pem', 'w') as f:
+        with open(test_config.proxy_fqn, 'w') as f:
             f.write('test content')
 
-        try:
-            test_result = composable._run()
-            assert test_result == 0, 'expect success'
-            assert (
-                client_mock.return_value.data_client.info.call_count == 30
-            ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
-            assert client_mock.return_value.data_client.put.called, 'put called for previews'
-            assert client_mock.return_value.data_client.put.call_count == 24, 'wrong put call count'
-            assert client_mock.return_value.data_client.cadcget.called, 'cadcget should be called'
-            # 18 = 6 observations * 3 files (.avedb, .orig, .ndatdb) / observation needing cadcget retrieval
-            assert client_mock.return_value.data_client.cadcget.call_count == 18, 'cadcget call count'
-            # 30 = once per archived file
-            assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
-            assert client_mock.return_value.metadata_client.update.call_count == 30, 'meta update call count'
-            prefix = os.path.basename(temp_dir)
-            report_fqn = f'{temp_dir}/logs/{prefix}_report.txt'
-            _check_report_file(report_fqn, 30)
-        finally:
-            os.chdir(test_main_app.TEST_DATA_DIR)
+        test_result = composable._run()
+        assert test_result == 0, 'expect success'
+        assert (
+            client_mock.return_value.data_client.info.call_count == 30
+        ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
+        assert client_mock.return_value.data_client.put.called, 'put called for previews'
+        assert client_mock.return_value.data_client.put.call_count == 24, 'wrong put call count'
+        assert client_mock.return_value.data_client.cadcget.called, 'cadcget should be called'
+        # 18 = 6 observations * 3 files (.avedb, .orig, .ndatdb) / observation needing cadcget retrieval
+        assert client_mock.return_value.data_client.cadcget.call_count == 18, 'cadcget call count'
+        # 30 = once per archived file
+        assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
+        assert client_mock.return_value.metadata_client.update.call_count == 30, 'meta update call count'
+        _check_report_file(test_config.report_fqn, 30)
+    finally:
+        os.chdir(orig_cwd)
 
 
 # do this if there's a need to re-generate the sc2repo content with big changes

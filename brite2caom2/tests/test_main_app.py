@@ -67,7 +67,7 @@
 # ***********************************************************************
 #
 import brite2caom2.storage_name
-from brite2caom2 import fits2caom2_augmentation, main_app
+from brite2caom2 import fits2caom2_augmentation
 from caom2.diff import get_differences
 from caom2pipe.caom_composable import get_all_artifact_keys
 from caom2pipe import manage_composable as mc
@@ -93,54 +93,47 @@ def pytest_generate_tests(metafunc):
 
 
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_main_app(clients_mock, test_name):
-    mc.StorageName.collection = main_app.COLLECTION
-    original_scheme = mc.StorageName.scheme
-    mc.StorageName.scheme = 'cadc'
-    try:
-        storage_name = brite2caom2.storage_name.BriteName(entry=test_name)
-        metadata_reader = reader.BriteFileMetadataReader()
-        metadata_reader.set(storage_name)
-        kwargs = {
-            'storage_name': storage_name,
-            'metadata_reader': metadata_reader,
-            'clients': clients_mock,
-        }
-        expected_fqn = f'{TEST_DATA_DIR}/{storage_name.obs_id}.expected.xml'
-        expected = mc.read_obs_from_file(expected_fqn)
-        in_fqn = expected_fqn.replace('.expected', '.in')
-        ext = test_name.split('.')[-1]
-        actual_fqn = expected_fqn.replace('.expected', f'.{ext}.actual')
-        observation = None
-        if os.path.exists(actual_fqn):
-            os.unlink(actual_fqn)
+def test_main_app(clients_mock, test_name, test_config):
+    storage_name = brite2caom2.storage_name.BriteName(entry=test_name)
+    metadata_reader = reader.BriteFileMetadataReader()
+    metadata_reader.set(storage_name)
+    kwargs = {
+        'storage_name': storage_name,
+        'metadata_reader': metadata_reader,
+        'clients': clients_mock,
+    }
+    expected_fqn = f'{TEST_DATA_DIR}/{storage_name.obs_id}.expected.xml'
+    expected = mc.read_obs_from_file(expected_fqn)
+    in_fqn = expected_fqn.replace('.expected', '.in')
+    ext = test_name.split('.')[-1]
+    actual_fqn = expected_fqn.replace('.expected', f'.{ext}.actual')
+    observation = None
+    if os.path.exists(actual_fqn):
+        os.unlink(actual_fqn)
+    if os.path.exists(in_fqn):
+        observation = mc.read_obs_from_file(in_fqn)
+    observation = fits2caom2_augmentation.visit(observation, **kwargs)
+    assert observation is not None, f'expect an observation {test_name}'
+    artifact_uris = get_all_artifact_keys(observation)
+    if len(artifact_uris) == 5:
+        # only check expected observation structure once all the artifacts have been added
         if os.path.exists(in_fqn):
-            observation = mc.read_obs_from_file(in_fqn)
-        observation = fits2caom2_augmentation.visit(observation, **kwargs)
-        assert observation is not None, f'expect an observation {test_name}'
-        artifact_uris = get_all_artifact_keys(observation)
-        if len(artifact_uris) == 5:
-            # only check expected observation structure once all the artifacts have been added
-            if os.path.exists(in_fqn):
-                # make sure future test runs start with a non-existent observation
-                os.unlink(in_fqn)
-            try:
-                _set_release_date_values(observation)
-                compare_result = get_differences(expected, observation)
-            except Exception as e:
-                mc.write_obs_to_file(observation, actual_fqn)
-                raise e
-            if compare_result is not None:
-                mc.write_obs_to_file(observation, actual_fqn)
-                compare_text = '\n'.join([r for r in compare_result])
-                msg = f'Differences found in observation {expected.observation_id}\n{compare_text}'
-                raise AssertionError(msg)
-        else:
-            mc.write_obs_to_file(observation, in_fqn)
-        # assert False  # cause I want to see logging messages
-    finally:
-        mc.StorageName.collection = None
-        mc.StorageName.scheme = original_scheme
+            # make sure future test runs start with a non-existent observation
+            os.unlink(in_fqn)
+        try:
+            _set_release_date_values(observation)
+            compare_result = get_differences(expected, observation)
+        except Exception as e:
+            mc.write_obs_to_file(observation, actual_fqn)
+            raise e
+        if compare_result is not None:
+            mc.write_obs_to_file(observation, actual_fqn)
+            compare_text = '\n'.join([r for r in compare_result])
+            msg = f'Differences found in observation {expected.observation_id}\n{compare_text}'
+            raise AssertionError(msg)
+    else:
+        mc.write_obs_to_file(observation, in_fqn)
+    # assert False  # cause I want to see logging messages
 
 
 def _set_release_date_values(observation):

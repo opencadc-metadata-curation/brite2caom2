@@ -105,8 +105,8 @@ class BriteTodoRunner(TodoRunner):
     before storage/ingestion can take place, although the sentinel files themselves are not archived.
     """
 
-    def __init__(self, config, organizer, builder, source, metadata_reader, application):
-        super().__init__(config, organizer, builder, source, metadata_reader, application)
+    def __init__(self, config, organizer, builder, source, metadata_reader, observable, reporter):
+        super().__init__(config, organizer, builder, source, metadata_reader, observable, reporter)
 
     def _build_todo_list(self):
         """
@@ -160,10 +160,10 @@ def _run():
             clients,
             name_builder,
             source,
-            modify_transfer,
             metadata_reader,
-            store_transfer,
             organizer,
+            observable,
+            reporter,
         ) = common_runner_init(
             config,
             clients,
@@ -176,10 +176,11 @@ def _run():
             META_VISITORS,
             DATA_VISITORS,
             None,
+            main_app.APPLICATION,
         )
 
         runner = BriteTodoRunner(
-            config, organizer, name_builder, source, metadata_reader, main_app.APPLICATION
+            config, organizer, name_builder, source, metadata_reader, observable, reporter
         )
         result = runner.run()
         result |= runner.run_retry()

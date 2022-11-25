@@ -75,14 +75,13 @@ import numpy as np
 from matplotlib import pylab
 
 from caom2pipe import manage_composable as mc
-from brite2caom2.main_app import COLLECTION
 from brite2caom2.storage_name import add_entry
 
 
 class BRITEUndecorrelatedPreview(mc.PreviewVisitor):
 
     def __init__(self, **kwargs):
-        super().__init__(COLLECTION, **kwargs)
+        super().__init__(**kwargs)
 
     def generate_plots(self, obs_id):
         mjd = np.array(self._metadata_reader.time_series[self._storage_name.file_uri]['HJD']) - 2400000.5
@@ -104,7 +103,7 @@ class BRITEUndecorrelatedPreview(mc.PreviewVisitor):
 class BRITEDecorrelatedPreview(mc.PreviewVisitor):
 
     def __init__(self, instrument_name, **kwargs):
-        super().__init__(COLLECTION, **kwargs)
+        super().__init__(**kwargs)
         self._instrument_name = instrument_name
         # do the things necessary to read the metadata for the .ndatdb and .avedb files
         add_entry(self._storage_name, '.rlogdb', '.ndatdb', self._clients, self._metadata_reader)

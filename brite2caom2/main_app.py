@@ -81,11 +81,10 @@ from datetime import datetime
 from brite2caom2.storage_name import add_entry, BriteName
 
 
-__all__ = ['COLLECTION', 'APPLICATION', 'mapping_factory']
+__all__ = ['APPLICATION', 'mapping_factory']
 
 
 APPLICATION = 'brite2caom2'
-COLLECTION = 'BRITE-Constellation'
 
 
 class BriteMapping(cc.TelescopeMapping):

@@ -68,7 +68,7 @@
 #
 
 
-from caom2pipe.manage_composable import Config, TaskType
+from caom2pipe.manage_composable import Config, ExecutionReporter, TaskType
 from brite2caom2.data_source import BriteLocalFilesDataSource
 
 import pytest
@@ -95,15 +95,17 @@ def test_config():
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config):
+def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
     # all the files have yet to be stored to CADC
+    test_config.change_working_directory(tmp_path.as_posix())
+
     clients_mock.return_value.data_client.info.return_value = None
     test_reader = Mock()
     test_subject = BriteLocalFilesDataSource(
         test_config, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_subject._capture_success = Mock()
-    test_subject._capture_failure = Mock()
+    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_subject.reporter = test_reporter
 
     # first test - five files that make up a single Observation
     nominal_dir_listing = _create_dir_listing(EXTENSIONS)
@@ -114,24 +116,28 @@ def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config):
         test_subject.remove_unarchived()
         test_result = test_subject._work
         assert len(test_result) == 5, 'nominal execution fail, wrong length'
-        assert test_subject._capture_success.called, 'success should be called'
-        assert test_subject._capture_success.call_count == 2, 'success call count'
-        assert not test_subject._capture_failure.called, 'failure should not be called'
+        assert test_reporter.all == 7, 'todo count'
+        assert test_reporter._summary._success_sum == 2, f'wrong report {test_reporter._summary}'
+        assert test_reporter._summary._skipped_sum == 0, f'wrong skipped {test_reporter._summary}'
+        assert test_reporter._summary._rejected_sum == 0, f'wrong rejected {test_reporter._summary}'
         assert move_mock.called, 'cleanup should be called for non-archived files'
+        assert move_mock.call_count == 2, 'move call count'
 
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_config):
+def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
     # all the files have yet to be stored to CADC
+    test_config.change_working_directory(tmp_path.as_posix())
+
     clients_mock.return_value.data_client.info.return_value = None
 
     test_reader = Mock()
     test_subject = BriteLocalFilesDataSource(
         test_config, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_subject._capture_success = Mock()
-    test_subject._capture_failure = Mock()
+    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_subject.reporter = test_reporter
 
     # second test - missing a file, no correct observations
     # post-conditions - did the clean up happen?
@@ -156,14 +162,19 @@ def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_con
             ],
         ), 'wrong move calls'
         assert len(test_subject._work) == 0, 'wrong number of files left over after clean up'
-        assert not test_subject._capture_success.called, 'success should not be called'
-        assert test_subject._capture_failure.called, 'failure should be called'
-        assert test_subject._capture_failure.call_count == 6, 'failure call count'
+        assert test_reporter.all == 6, 'todo count'
+        assert test_reporter._summary._success_sum == 0, f'wrong report {test_reporter._summary}'
+        assert test_reporter._summary._skipped_sum == 0, f'wrong skipped {test_reporter._summary}'
+        assert test_reporter._summary._rejected_sum == 0, f'wrong rejected {test_reporter._summary}'
+        assert test_reporter._summary._errors_sum == 6, f'wrong error {test_reporter._summary}'
+        assert move_mock.called, 'cleanup should be called for non-archived files'
+        assert move_mock.call_count == 6, 'move call count'
 
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config):
+def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
+    test_config.change_working_directory(tmp_path.as_posix())
     # all the files have yet to be stored to CADC
     clients_mock.return_value.data_client.info.return_value = None
     test_config.cleanup_files_when_storing = False
@@ -172,8 +183,8 @@ def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config
     test_subject = BriteLocalFilesDataSource(
         test_config, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_subject._capture_success = Mock()
-    test_subject._capture_failure = Mock()
+    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_subject.reporter = test_reporter
 
     # third test - one missing a file, one correct observation
     # post-conditions - did the clean up happen?
@@ -188,10 +199,11 @@ def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config
         test_result = test_subject._work
         assert len(test_result) == 5, 'mixed bag execution fail, wrong length'
         assert not move_mock.called, 'cleanup should not be called'
-        assert test_subject._capture_success.called, 'success should be called'
-        assert test_subject._capture_success.call_count == 2, 'success call count'
-        assert test_subject._capture_failure.called, 'failure should be called'
-        assert test_subject._capture_failure.call_count == 6, 'failure call count'
+        assert test_reporter.all == 13, 'todo count'
+        assert test_reporter._summary._success_sum == 2, f'wrong report {test_reporter._summary}'
+        assert test_reporter._summary._skipped_sum == 0, f'wrong skipped {test_reporter._summary}'
+        assert test_reporter._summary._rejected_sum == 0, f'wrong rejected {test_reporter._summary}'
+        assert test_reporter._summary._errors_sum == 6, f'wrong error {test_reporter._summary}'
 
 
 def _create_dir_listing(extensions, prefix='A'):
