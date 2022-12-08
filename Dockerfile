@@ -10,6 +10,7 @@ WORKDIR /usr/src/app
 
 ARG OPENCADC_BRANCH=master
 ARG OPENCADC_REPO=opencadc
+ARG BRITE_BRANCH=main
 
 RUN git clone https://github.com/${OPENCADC_REPO}/caom2tools.git && \
     cd caom2tools && \
@@ -19,7 +20,7 @@ RUN git clone https://github.com/${OPENCADC_REPO}/caom2tools.git && \
 
 RUN pip install git+https://github.com/${OPENCADC_REPO}/caom2pipe@${OPENCADC_BRANCH}#egg=caom2pipe
 
-RUN pip install git+https://github.com/${OPENCADC_REPO}/brite2caom2@${OPENCADC_BRANCH}#egg=brite2caom2
+RUN pip install git+https://github.com/${OPENCADC_REPO}/brite2caom2@${BRITE_BRANCH}#egg=brite2caom2
 
 FROM python:3.10-slim
 WORKDIR /usr/src/app
