@@ -83,7 +83,7 @@ import traceback
 from caom2pipe.client_composable import ClientCollection
 from caom2pipe.manage_composable import Config, StorageName
 from caom2pipe.name_builder_composable import EntryBuilder
-from caom2pipe.run_composable import common_runner_init, run_by_todo, TodoRunner
+from caom2pipe.run_composable import common_runner_init, run_by_state, run_by_todo, TodoRunner
 from caom2pipe.transfer_composable import modify_transfer_factory, store_transfer_factory
 
 from brite2caom2 import data_source, main_app, reader, storage_name
@@ -127,19 +127,22 @@ class BriteTodoRunner(TodoRunner):
         self._logger.debug('End _build_todo_list.')
 
 
-def _common_init(config):
+def _common_init():
+    config = Config()
+    config.get_executors()
     builder = EntryBuilder(storage_name.BriteName)
     StorageName.collection = config.collection
     clients = ClientCollection(config)
+    source = None
     if config.use_local_files:
         metadata_reader = reader.BriteFileMetadataReader()
+        source = data_source.BriteLocalFilesDataSource(
+            config, clients.data_client, metadata_reader, config.recurse_data_sources
+        )
     else:
         metadata_reader = reader.BriteStorageClientMetadataReader(clients.data_client)
-    source = data_source.BriteLocalFilesDataSource(
-        config, clients.data_client, metadata_reader, config.recurse_data_sources
-    )
     logging.getLogger('matplotlib').setLevel(logging.ERROR)
-    return builder, clients, metadata_reader, source
+    return config, builder, clients, metadata_reader, source
 
 
 def _run():
@@ -149,9 +152,7 @@ def _run():
     :return 0 if successful, -1 if there's any sort of failure. Return status
         is used by airflow for task instance management and reporting.
     """
-    config = Config()
-    config.get_executors()
-    builder, clients, metadata_reader, source = _common_init(config)
+    config, builder, clients, metadata_reader, source = _common_init()
     if config.use_local_files:
         modify_transfer = modify_transfer_factory(config, clients)
         store_transfer = store_transfer_factory(config, clients)
@@ -189,6 +190,7 @@ def _run():
         result = run_by_todo(
             config=config,
             name_builder=builder,
+            source=source,
             meta_visitors=[],
             data_visitors=META_VISITORS,  # because there's no fhead for text files
             clients=clients,
@@ -202,6 +204,34 @@ def run():
     try:
         result = _run()
         sys.exit(result)
+    except Exception as e:
+        logging.error(e)
+        tb = traceback.format_exc()
+        logging.debug(tb)
+        sys.exit(-1)
+
+
+def _run_state():
+    """Uses a state file with a timestamp to control which entries will be
+    processed.
+    """
+    config, builder, clients, metadata_reader, files_source = _common_init()
+    return run_by_state(
+        name_builder=builder,
+        bookmark_name=BRITE_BOOKMARK,
+        meta_visitors=META_VISITORS,
+        data_visitors=DATA_VISITORS,
+        source=files_source,
+        clients=clients,
+        metadata_reader=metadata_reader,
+    )
+
+
+def run_state():
+    """Wraps _run_state in exception handling."""
+    try:
+        _run_state()
+        sys.exit(0)
     except Exception as e:
         logging.error(e)
         tb = traceback.format_exc()

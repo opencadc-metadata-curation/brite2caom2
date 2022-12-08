@@ -71,21 +71,99 @@ import glob
 import os
 import test_main_app
 
-from collections import defaultdict
-from mock import patch
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
 from shutil import copy
+from unittest.mock import call, patch
 
 from caom2utils import data_util
+from caom2pipe.data_source_composable import StateRunnerMeta
 from caom2pipe import manage_composable as mc
-from brite2caom2 import composable
+from brite2caom2 import composable, storage_name
 import test_data_source
 
 
 TEST_ROOT_DIR = f'{test_main_app.TEST_DATA_DIR}/HD37202'
 
 
-def test_run_by_state():
-    pass
+@patch('caom2pipe.execute_composable.CaomExecute._caom2_store')
+@patch('caom2pipe.execute_composable.CaomExecute._visit_meta')
+@patch('brite2caom2.data_source.BriteLocalFilesDataSource.clean_up')
+@patch('brite2caom2.data_source.BriteLocalFilesDataSource.get_time_box_work')
+@patch('brite2caom2.composable.ClientCollection', autospec=True)
+def test_run_store_ingest_by_state(
+    clients_mock,
+    get_work_mock,
+    cleanup_mock,
+    visit_meta_mock,
+    caom2_store_mock,
+    test_config,
+    tmp_path,
+):
+    start_time = datetime.utcnow() - timedelta(days=1)
+    temp_deque = deque()
+    prefix = 'HD37202_31-Tau-I-2017_BLb_1_5_A'
+    for ext in test_data_source.EXTENSIONS:
+        f_name = f'{prefix}{ext}'
+        if storage_name.BriteName.is_archived(f_name):
+            temp_deque.append(StateRunnerMeta(f'{TEST_ROOT_DIR}/{f_name}', start_time + timedelta(hours=1)))
+    get_work_mock.return_value = temp_deque
+    clients_mock.return_value.metadata_client.read.return_value = None
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        test_config.change_working_directory(tmp_path.as_posix())
+        test_config.task_types = [mc.TaskType.STORE, mc.TaskType.INGEST]
+        test_config.use_local_files = True
+        test_config.cleanup_files_when_storing = True
+        test_config.cleanup_failure_destination = '/data/failure'
+        test_config.cleanup_success_destination = '/data/success'
+        test_config.data_sources = ['/test_files']
+        test_config.data_source_extensions = ['.fits']
+        test_config.logging_level = 'INFO'
+        test_config.proxy_file_name = 'cadcproxy.pem'
+        test_config.interval = 500
+        test_config.write_to_file(test_config)
+        with open(test_config.proxy_fqn, 'w') as f:
+            f.write('test content')
+        mc.State.write_bookmark(test_config.state_fqn, composable.BRITE_BOOKMARK, start_time.isoformat())
+
+        try:
+            test_result = composable._run_state()
+        except Exception as e:
+            assert False, e
+
+        assert test_result is not None, 'expect result'
+        assert test_result == 0, 'expect success'
+        assert clients_mock.return_value.metadata_client.read.called, 'read called'
+        # make sure data is not really being written to CADC storage :)
+        assert clients_mock.return_value.data_client.put.called, 'put should be called'
+        assert clients_mock.return_value.data_client.put.call_count == 5, 'wrong number of puts'
+        put_calls = [
+            call(TEST_ROOT_DIR, f'{test_config.scheme}:{test_config.collection}/{prefix}.avedb'),
+            call(TEST_ROOT_DIR, f'{test_config.scheme}:{test_config.collection}/{prefix}.freq0db'),
+            call(TEST_ROOT_DIR, f'{test_config.scheme}:{test_config.collection}/{prefix}.ndatdb'),
+            call(TEST_ROOT_DIR, f'{test_config.scheme}:{test_config.collection}/{prefix}.orig'),
+            call(TEST_ROOT_DIR, f'{test_config.scheme}:{test_config.collection}/{prefix}.rlogdb'),
+        ]
+        clients_mock.return_value.data_client.put.assert_has_calls(put_calls, any_order=False)
+        assert cleanup_mock.called, 'cleanup'
+        cleanup_calls = [
+            call(f'{TEST_ROOT_DIR}/{prefix}.avedb', 0, 0),
+            call(f'{TEST_ROOT_DIR}/{prefix}.freq0db', 0, 0),
+            call(f'{TEST_ROOT_DIR}/{prefix}.ndatdb', 0, 0),
+            call(f'{TEST_ROOT_DIR}/{prefix}.orig', 0, 0),
+            call(f'{TEST_ROOT_DIR}/{prefix}.rlogdb', 0, 0),
+        ]
+        cleanup_mock.assert_has_calls(cleanup_calls), 'wrong cleanup args'
+        assert visit_meta_mock.called, '_visit_meta call'
+        assert visit_meta_mock.call_count == 5, '_visit_meta call count'
+        assert caom2_store_mock.called, '_caom2_store call'
+        assert caom2_store_mock.call_count == 5, '_caom2_store call count'
+
+    finally:
+        os.chdir(cwd)
 
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
@@ -163,8 +241,8 @@ def test_run_local_clean_up(access_mock, client_mock, move_mock, test_config, tm
         assert client_mock.return_value.data_client.put.called, 'put should be called'
         # 54 = 30 science files + 24 preview files
         # 24 preview files => 2 planes per observation, 2 files per plane => 4 files/observation
-        #    6 observations * 4 files = 24 preview files
-        assert client_mock.return_value.data_client.put.call_count == 54, 'put call count'
+        #    6 observations * 2 files = 12 preview files
+        assert client_mock.return_value.data_client.put.call_count == 42, 'put call count'
         # 30 = once per archived file
         assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
         assert client_mock.return_value.metadata_client.create.call_count == 6, 'meta create call count'
@@ -190,7 +268,7 @@ def test_run_scrape(test_config, tmp_path):
         test_result = composable._run()
         assert test_result == 0, 'wrong return value'
         previews = glob.glob(f'{tmp_path.as_posix()}/*/*.jpg')
-        assert len(previews) == 36, 'preview generation failed'
+        assert len(previews) == 18, 'preview generation failed'
         # 63 = 7 files * 9 observations
         _check_report_file(test_config.report_fqn, 63)
     finally:
@@ -262,7 +340,7 @@ def test_run_reingest_retry(access_mock, client_mock, test_config, tmp_path):
             client_mock.return_value.data_client.info.call_count == 30
         ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
         assert client_mock.return_value.data_client.put.called, 'put called for previews'
-        assert client_mock.return_value.data_client.put.call_count == 24, 'wrong put call count'
+        assert client_mock.return_value.data_client.put.call_count == 12, 'wrong put previews call count'
         assert client_mock.return_value.data_client.cadcget.called, 'cadcget should be called'
         # 18 = 6 observations * 3 files (.avedb, .orig, .ndatdb) / observation needing cadcget retrieval
         assert client_mock.return_value.data_client.cadcget.call_count == 18, 'cadcget call count'
@@ -275,25 +353,27 @@ def test_run_reingest_retry(access_mock, client_mock, test_config, tmp_path):
 
 
 # do this if there's a need to re-generate the sc2repo content with big changes
-# def test_run_roundtrip():
-#     test_config = mc.Config()
-#     test_config.collection = main_app.COLLECTION
-#     test_config.logging_level = 'DEBUG'
+# def test_run_roundtrip(test_config):
+#     temp_dir = f'{test_main_app.THIS_DIR}/round_trip'
+#     previews = glob.glob(f'{temp_dir}/*/*.jpg')
+#     for preview in previews:
+#         os.unlink(preview)
+#
+#     test_config.logging_level = 'INFO'
 #     test_config.use_local_files = True
 #     test_config.data_sources = [f'{test_main_app.TEST_DATA_DIR}/HD36486', f'{test_main_app.TEST_DATA_DIR}/HD37202']
 #     # test_config.data_sources = [f'{test_main_app.TEST_DATA_DIR}/HD37202']
 #     test_config.data_source_extensions = test_data_source.EXTENSIONS
 #     test_config.task_types = [mc.TaskType.SCRAPE]
-#     temp_dir = f'{test_main_app.THIS_DIR}/round_trip'
 #     os.chdir(temp_dir)
 #     test_config.log_file_directory = f'{temp_dir}/logs'
-#     mc.Config.write_to_file(test_config)
+#     test_config.write_to_file(test_config)
 #     test_result = composable._run()
 #     assert test_result == 0, 'wrong return value'
 #     previews = glob.glob(f'{temp_dir}/*/*.jpg')
-#     assert len(previews) == 60, 'preview generation failed'
+#     assert len(previews) == 30, 'preview generation failed'
 #     report_fqn = f'{temp_dir}/logs/app_report.txt'
-#     _check_report_file(report_fqn)
+#     _check_report_file(report_fqn, 30)
 
 
 def _check_report_file(fqn, expected_count):

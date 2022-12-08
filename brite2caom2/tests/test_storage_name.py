@@ -97,7 +97,4 @@ def test_storage_name(test_config):
             test_subject.destination_uris
             == [f'{test_config.scheme}:{test_config.collection}/{test_subject.file_name}']
         ), f'wrong decorrelated uris {test_subject.destination_uris}'
-        if test_subject.has_undecorrelated_metadata:
-            assert test_subject.product_id == 'un-decorrelated', 'wrong product id'
-        else:
-            assert test_subject.product_id == 'decorrelated', 'wrong product id'
+        assert test_subject.product_id == 'timeseries', 'wrong product id'

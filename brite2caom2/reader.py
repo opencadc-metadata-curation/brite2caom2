@@ -168,9 +168,9 @@ class BriteMetaDataReader(rdc.MetadataReader):
                 ll = line.split('=', 1)
                 if '----------' in ll[0]:
                     continue
-                keyword = ll[0].replace(f'{BriteMetaDataReader.comment_char} ', '').rstrip().lstrip()
+                keyword = ll[0].replace(f'{BriteMetaDataReader.comment_char} ', '').strip()
                 [value, comment] = ll[1].split('/', 1)
-                value = value.rstrip().lstrip()
+                value = value.strip()
                 metadata[keyword] = value
                 # Initialize time series data arrays
                 if 'column' in keyword:
@@ -202,7 +202,7 @@ class BriteMetaDataReader(rdc.MetadataReader):
         """Retrieves FileInfo information to memory."""
         self._logger.debug(f'Begin set_file_info for {storage_name.file_name}')
         for index, entry in enumerate(storage_name.destination_uris):
-            if entry not in self._file_info and BriteName.archived(entry):
+            if entry not in self._file_info and BriteName.is_archived(entry):
                 self._logger.debug(f'Retrieve FileInfo for {entry}')
                 self._retrieve_file_info(entry, storage_name.source_names[index])
         self._logger.debug('End set_file_info')

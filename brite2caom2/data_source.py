@@ -129,7 +129,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
                 self._work.remove(fqn)
 
     def clean_up(self, entry, execution_result, current_count):
-        if BriteName.archived(entry):
+        if BriteName.is_archived(entry):
             super().clean_up(entry, execution_result, current_count)
         else:
             # avoid the check for the presence of the file in CADC storage prior to picking a clean up destination.
@@ -143,7 +143,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
             self._logger.debug('End clean_up.')
 
     def default_filter(self, entry):
-        if BriteName.archived(entry.path):
+        if BriteName.is_archived(entry.path):
             work_with_file = super().default_filter(entry)
         else:
             # avoid the check for the presence of the file in CADC storage, since it will never be in CADC storage.
@@ -154,7 +154,7 @@ class BriteLocalFilesDataSource(LocalFilesDataSource):
         # remove the files that are not archived from the list of work, and put them in the success destination
         remove_these = []
         for entry in self._work:
-            if not BriteName.archived(entry):
+            if not BriteName.is_archived(entry):
                 if self._cleanup_when_storing:
                     self._move_action(entry, self._cleanup_success_directory)
                 remove_these.append(entry)

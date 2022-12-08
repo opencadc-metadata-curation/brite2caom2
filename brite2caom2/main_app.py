@@ -78,7 +78,7 @@ from caom2pipe.manage_composable import CadcException, to_float
 from caom2utils.caom2blueprint import update_artifact_meta
 from datetime import datetime
 
-from brite2caom2.storage_name import add_entry, BriteName
+from brite2caom2.storage_name import get_entry, BriteName
 
 
 __all__ = ['APPLICATION', 'mapping_factory']
@@ -110,6 +110,7 @@ class BriteMapping(cc.TelescopeMapping):
         bp.set('Observation.intent', 'science')
         bp.set('Observation.type', 'object')
 
+        bp.set('Plane.calibrationLevel', CalibrationLevel.CALIBRATED)
         bp.set('Plane.dataProductType', DataProductType.TIMESERIES)
         bp.set('Plane.dataRelease', release_date)
         bp.set('Plane.metaRelease', release_date)
@@ -146,7 +147,7 @@ class BriteMapping(cc.TelescopeMapping):
                 )
                 continue
             for artifact in plane.artifacts.values():
-                if artifact.uri != self._storage_name.file_uri or not self._storage_name.archived:
+                if artifact.uri != self._storage_name.file_uri or not self._storage_name.is_archived:
                     self._logger.debug(f'{self._storage_name.file_uri} is not archived. Continuing.')
                     continue
                 update_artifact_meta(artifact, file_info)
@@ -161,33 +162,23 @@ class BriteMapping(cc.TelescopeMapping):
 
     def _update_copy_metadata(self, observation):
         """
-        Copy the plane metadata from the un-decorrelated plane to the decorrelated plane.
-
-        Copy the artifact metadata in the decorrelated plane for the .natdb artifact to the other artifacts in the
-        decorrelated plane.
+        Copy the artifact metadata for the .natdb artifact to the other artifacts.
+        Skip the .orig artifact, which has its own metadata.
         """
-        de_plane_key = 'decorrelated'
-        un_plane_key = 'un-decorrelated'
-        if de_plane_key in observation.planes.keys() and un_plane_key in observation.planes.keys():
-            self._logger.debug(f'Updating plane.provenance metadata for {self._storage_name.file_uri}')
-            de_plane = observation.planes[de_plane_key]
-            un_plane = observation.planes[un_plane_key]
-            de_plane.provenance = un_plane.provenance
-            de_plane.calibration_level = CalibrationLevel.CALIBRATED
-
-            # account for preview and thumbnail artifacts
-            if len(de_plane.artifacts.values()) >= 4:
-                dat_artifact_key = self._storage_name.file_uri.split('.')[0] + '.ndatdb'
-                dat_artifact = de_plane.artifacts[dat_artifact_key]
-                for de_artifact in de_plane.artifacts.values():
-                    if '.jpg' in de_artifact.uri or '.natdb' in de_artifact.uri:
-                        continue
-                    for dat_part in dat_artifact.parts.values():
-                        part_copy = cc.copy_part(dat_part)
-                        de_artifact.parts.add(part_copy)
-                        for dat_chunk in dat_part.chunks:
-                            chunk_copy = cc.copy_chunk(dat_chunk)
-                            part_copy.chunks.append(chunk_copy)
+        plane = observation.planes['timeseries']
+        dat_artifact_key = self._storage_name.file_uri.split('.')[0] + '.ndatdb'
+        # account for preview and thumbnail artifacts
+        if dat_artifact_key in plane.artifacts.keys() and len(plane.artifacts.values()) >= 5:
+            dat_artifact = plane.artifacts[dat_artifact_key]
+            for artifact in plane.artifacts.values():
+                if '.jpg' in artifact.uri or '.natdb' in artifact.uri or '.orig' in artifact.uri:
+                    continue
+                for dat_part in dat_artifact.parts.values():
+                    part_copy = cc.copy_part(dat_part)
+                    artifact.parts.add(part_copy)
+                    for dat_chunk in dat_part.chunks:
+                        chunk_copy = cc.copy_chunk(dat_chunk)
+                        part_copy.chunks.append(chunk_copy)
 
 
 class BriteUndecorrelatedMapping(BriteMapping):
@@ -213,7 +204,6 @@ class BriteUndecorrelatedMapping(BriteMapping):
         bp.set('Observation.telescope.name', self._md_ptr.get('SatfulID'))
         bp.set('Observation.instrument.name', self._md_ptr.get('SatfulID'))
 
-        bp.set('Plane.calibrationLevel', CalibrationLevel.RAW_STANDARD)
         bp.set('Plane.provenance.name', self._md_ptr.get('RedMetho'))
         bp.set('Plane.provenance.producer', self._md_ptr.get('RedProID'))
         bp.set('Plane.provenance.version', self._md_ptr.get('RedVersi'))
@@ -327,7 +317,7 @@ class BriteDecorrelatedMapping(BriteUndecorrelatedMapping):
         super().__init__(storage_name, metadata_reader, clients)
         # do the things necessary to read the metadata for the .orig file, which is the origin of most of
         # the Observation content, except for the TemporalWCS start/stop times
-        orig_uri, new_fqn = add_entry(self._storage_name, '.ndatdb', '.orig', self._clients, self._metadata_reader)
+        orig_uri, new_fqn = get_entry(self._storage_name, '.ndatdb', '.orig', self._clients, self._metadata_reader)
         self._logger.debug('Add .orig URI to MetadataReader.')
         self._md_ptr = self._metadata_reader.metadata[orig_uri]
 
@@ -343,7 +333,7 @@ class BriteDecorrelatedMapping(BriteUndecorrelatedMapping):
 
 
 def mapping_factory(storage_name, metadata_reader, clients, logger):
-    if BriteName.archived(storage_name.file_name):
+    if BriteName.is_archived(storage_name.file_name):
         if storage_name.has_undecorrelated_metadata:
             result = BriteUndecorrelatedMapping(storage_name, metadata_reader, clients)
         elif storage_name.has_decorrelated_metadata:

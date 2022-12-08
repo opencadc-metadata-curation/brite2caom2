@@ -75,29 +75,7 @@ import numpy as np
 from matplotlib import pylab
 
 from caom2pipe import manage_composable as mc
-from brite2caom2.storage_name import add_entry
-
-
-class BRITEUndecorrelatedPreview(mc.PreviewVisitor):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def generate_plots(self, obs_id):
-        mjd = np.array(self._metadata_reader.time_series[self._storage_name.file_uri]['HJD']) - 2400000.5
-        flux = np.array(self._metadata_reader.time_series[self._storage_name.file_uri]['FLUX'])
-        pylab.clf()
-        pylab.grid(True)
-        # color is black, marker is dot
-        pylab.plot(mjd, flux, 'k.')
-        pylab.xlabel('Modified Julian Date', color='k')
-        pylab.ylabel('Flux (ADU/s)', color='k')
-        pylab.xlim(mjd.min(), mjd.max())
-        pylab.ylim(flux.min(), flux.max())
-        pylab.title(obs_id, color='k', fontweight='bold')
-        pylab.legend()
-        pylab.savefig(self._preview_fqn, format='png')
-        return self._save_figure()
+from brite2caom2.storage_name import get_entry
 
 
 class BRITEDecorrelatedPreview(mc.PreviewVisitor):
@@ -106,8 +84,8 @@ class BRITEDecorrelatedPreview(mc.PreviewVisitor):
         super().__init__(**kwargs)
         self._instrument_name = instrument_name
         # do the things necessary to read the metadata for the .ndatdb and .avedb files
-        add_entry(self._storage_name, '.rlogdb', '.ndatdb', self._clients, self._metadata_reader)
-        add_entry(self._storage_name, '.rlogdb', '.avedb', self._clients, self._metadata_reader)
+        get_entry(self._storage_name, '.rlogdb', '.ndatdb', self._clients, self._metadata_reader)
+        get_entry(self._storage_name, '.rlogdb', '.avedb', self._clients, self._metadata_reader)
 
     def generate_plots(self, obs_id):
         mjd_decorr = np.array(self._metadata_reader.time_series[self._storage_name.decorrelated_uri]['BJD'])
@@ -139,9 +117,7 @@ class BRITEDecorrelatedPreview(mc.PreviewVisitor):
 def visit(observation, **kwargs):
     storage_name = kwargs.get('storage_name')
     result = observation
-    if storage_name.has_undecorrelated_metadata:
-        result = BRITEUndecorrelatedPreview(**kwargs).visit(observation)
-    elif storage_name.is_last_to_ingest:
+    if storage_name.is_last_to_ingest:
         # attempt to make sure the instrument name has been set from the .orig file
         instrument_name = observation.instrument.name if observation.instrument is not None else 'BRITE Data'
         result = BRITEDecorrelatedPreview(instrument_name, **kwargs).visit(observation)

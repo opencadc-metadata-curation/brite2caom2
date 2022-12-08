@@ -71,7 +71,7 @@ from os.path import basename, dirname, exists, splitext
 from caom2pipe.manage_composable import StorageName
 
 
-__all__ = ['add_entry', 'BriteName']
+__all__ = ['get_entry', 'BriteName']
 
 
 class BriteName(StorageName):
@@ -132,7 +132,7 @@ class BriteName(StorageName):
     def is_valid(self):
         return True
 
-    def rename(self, original_extension, new_extension):
+    def use_different_file(self, original_extension, new_extension):
         """
         Common code to refer to a different file than the one currently being processed.
         :return:
@@ -145,21 +145,20 @@ class BriteName(StorageName):
         self._file_id = BriteName.remove_extensions(self._file_name)
 
     def set_product_id(self):
-        self._product_id = 'decorrelated'
-        if self.has_undecorrelated_metadata:
-            self._product_id = 'un-decorrelated'
+        # DB 07-12-22
+        self._product_id = 'timeseries'
 
     @staticmethod
     def remove_extensions(f_name):
         return splitext(f_name)[0]
 
     @staticmethod
-    def archived(file_name):
+    def is_archived(file_name):
         # files whose purpose is other than storage/ingestion at CADC
         return not (file_name.endswith('.lst') or file_name.endswith('.md5'))
 
 
-def add_entry(sn, original_extension, new_extension, clients, metadata_reader):
+def get_entry(sn, original_extension, new_extension, clients, metadata_reader):
     """
     Common code to retrieve and reference a different file than the one currently being processed in the collection
     of 5 that make up a BRITE-Constellation Observation.
@@ -169,10 +168,10 @@ def add_entry(sn, original_extension, new_extension, clients, metadata_reader):
       - the TemporalWCS metadata for the decorrelated plane
       - the previews for the decorrelated plane require data from two files
     """
-    fqn, uri = sn.rename(original_extension, new_extension)
+    fqn, uri = sn.use_different_file(original_extension, new_extension)
     if dirname(fqn) is None or dirname(fqn) == '':
         fqn = f'./{fqn}'
-    # retrieve the file if it doesn't already exist
+    # retrieve the file if it doesn't already exist - e.g. if re-ingesting files/observations
     if not exists(fqn) and clients is not None:
         clients.data_client.get(dirname(fqn), uri)
     # retrieve the file metadata if it doesn't already exist
