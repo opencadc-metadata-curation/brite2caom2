@@ -6,7 +6,7 @@ then
 fi
 
 if [[ ! -e ${PWD}/state.yml ]]; then
-  if [[ "${@}" == "brite_run_state" ]]; then
+  if [[ "${@}" == "brite_run_incremental" ]]; then
     yesterday=$(date -d yesterday "+%d-%b-%Y %H:%M")
     echo "bookmarks:
     brite_timestamp:
