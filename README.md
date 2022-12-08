@@ -101,4 +101,3 @@ https://github.com/opencadc/collection2caom2/wiki/Docker-and-Collections
 1. For some insight into what's happening, see: https://github.com/opencadc/collection2caom2
 
 1. For Docker information, see: https://www.docker.com
-
