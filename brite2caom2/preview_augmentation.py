@@ -3,7 +3,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2019.                            (c) 2019.
+#  (c) 2022.                            (c) 2022.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -62,39 +62,63 @@
 #  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
 #                                       <http://www.gnu.org/licenses/>.
 #
-#  $Revision: 4 $
+#  : 4 $
 #
 # ***********************************************************************
 #
 
-from brite2caom2.storage_name import BriteName
+"""
+Plotting routines to be adapted for previews and thumbnails from  @dbohlender.
+"""
+
+import numpy as np
+from matplotlib import pylab
+
+from caom2pipe import manage_composable as mc
+from brite2caom2.storage_name import get_entry
 
 
-def test_is_valid():
-    assert BriteName('anything').is_valid()
+class BRITEDecorrelatedPreview(mc.PreviewVisitor):
+
+    def __init__(self, instrument_name, **kwargs):
+        super().__init__(**kwargs)
+        self._instrument_name = instrument_name
+        # do the things necessary to read the metadata for the .ndatdb and .avedb files
+        get_entry(self._storage_name, '.rlogdb', '.ndatdb', self._clients, self._metadata_reader)
+        get_entry(self._storage_name, '.rlogdb', '.avedb', self._clients, self._metadata_reader)
+
+    def generate_plots(self, obs_id):
+        mjd_decorr = np.array(self._metadata_reader.time_series[self._storage_name.decorrelated_uri]['BJD'])
+        mag_decorr = np.array(self._metadata_reader.time_series[self._storage_name.decorrelated_uri]['BRITEMAG'])
+        sigma_decorr = np.array(self._metadata_reader.time_series[self._storage_name.decorrelated_uri]['SIGMA_BRITEMAG'])
+        mjd_ave = np.array(self._metadata_reader.time_series[self._storage_name.average_uri]['ave_BJD'])
+        mag_ave = np.array(self._metadata_reader.time_series[self._storage_name.average_uri]['ave_BRITEMAG'])
+        sigma_ave = np.array(self._metadata_reader.time_series[self._storage_name.average_uri]['ave_SIGMA_BRITEMAG'])
+
+        pylab.plot(mjd_decorr, mag_decorr, 'k.', label=self._instrument_name)
+        pylab.errorbar(mjd_decorr, mag_decorr, yerr=sigma_decorr, xerr=None, fmt='k.')
+        pylab.plot(mjd_ave, mag_ave, 'co', label='Average/orbit')
+        pylab.errorbar(mjd_ave, mag_ave, yerr=sigma_ave, xerr=None, fmt='c.')
+        pylab.xlabel('Barycentric Julian Date - 2456000.0', color='k')
+        pylab.ylabel('BRITE Magnitude', color='k')
+        pylab.xlim(mjd_decorr.min(), mjd_decorr.max())
+        # DB 07-11-22
+        # flip the y-axis direction on the ndatdb/ave plots since brighter = lower magnitude value
+        pylab.ylim(
+            mag_decorr.max() + sigma_decorr.max(),
+            mag_decorr.min() - sigma_decorr.max(),
+        )
+        pylab.title(obs_id, color='k', fontweight='bold')
+        pylab.legend()
+        pylab.savefig(self._preview_fqn, format='png')
+        return self._save_figure()
 
 
-def test_storage_name(test_config):
-    test_obs_id = 'HD31237_01-Ori-I-2013_BAb_setup3_APa2s5_DR2'
-    test_f_name_1 = f'{test_obs_id}.orig'
-    test_f_name_2 = f'{test_obs_id}.avedb'
-    test_uri_1 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_1}'
-    test_uri_2 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_2}'
-    for entry in [
-        test_f_name_1,
-        test_f_name_2,
-        test_uri_1,
-        test_uri_2,
-        f'https://localhost:8020/{test_f_name_1}',
-        f'https://localhost:8020/{test_f_name_2}',
-        f'vos:goliaths/brite/{test_f_name_1}',
-        f'vos:goliaths/brite/{test_f_name_2}',
-    ]:
-        test_subject = BriteName(entry)
-        assert test_subject.obs_id == test_obs_id, 'wrong obs id'
-        assert test_subject.source_names == [entry], 'wrong source names'
-        assert (
-            test_subject.destination_uris
-            == [f'{test_config.scheme}:{test_config.collection}/{test_subject.file_name}']
-        ), f'wrong decorrelated uris {test_subject.destination_uris}'
-        assert test_subject.product_id == 'timeseries', 'wrong product id'
+def visit(observation, **kwargs):
+    storage_name = kwargs.get('storage_name')
+    result = observation
+    if storage_name.is_last_to_ingest:
+        # attempt to make sure the instrument name has been set from the .orig file
+        instrument_name = observation.instrument.name if observation.instrument is not None else 'BRITE Data'
+        result = BRITEDecorrelatedPreview(instrument_name, **kwargs).visit(observation)
+    return result

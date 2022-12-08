@@ -3,7 +3,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2019.                            (c) 2019.
+#  (c) 2022.                            (c) 2022.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -62,39 +62,27 @@
 #  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
 #                                       <http://www.gnu.org/licenses/>.
 #
-#  $Revision: 4 $
+#  : 4 $
 #
 # ***********************************************************************
 #
 
-from brite2caom2.storage_name import BriteName
+from caom2pipe.manage_composable import Config, StorageName
+import pytest
+
+COLLECTION = 'BRITE-Constellation'
+SCHEME = 'cadc'
+PREVIEW_SCHEME = 'cadc'
 
 
-def test_is_valid():
-    assert BriteName('anything').is_valid()
-
-
-def test_storage_name(test_config):
-    test_obs_id = 'HD31237_01-Ori-I-2013_BAb_setup3_APa2s5_DR2'
-    test_f_name_1 = f'{test_obs_id}.orig'
-    test_f_name_2 = f'{test_obs_id}.avedb'
-    test_uri_1 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_1}'
-    test_uri_2 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_2}'
-    for entry in [
-        test_f_name_1,
-        test_f_name_2,
-        test_uri_1,
-        test_uri_2,
-        f'https://localhost:8020/{test_f_name_1}',
-        f'https://localhost:8020/{test_f_name_2}',
-        f'vos:goliaths/brite/{test_f_name_1}',
-        f'vos:goliaths/brite/{test_f_name_2}',
-    ]:
-        test_subject = BriteName(entry)
-        assert test_subject.obs_id == test_obs_id, 'wrong obs id'
-        assert test_subject.source_names == [entry], 'wrong source names'
-        assert (
-            test_subject.destination_uris
-            == [f'{test_config.scheme}:{test_config.collection}/{test_subject.file_name}']
-        ), f'wrong decorrelated uris {test_subject.destination_uris}'
-        assert test_subject.product_id == 'timeseries', 'wrong product id'
+@pytest.fixture()
+def test_config():
+    config = Config()
+    config.collection = COLLECTION
+    config.preview_scheme = PREVIEW_SCHEME
+    config.scheme = SCHEME
+    config.logging_level = 'INFO'
+    StorageName.collection = config.collection
+    StorageName.preview_scheme = config.preview_scheme
+    StorageName.scheme = config.scheme
+    return config

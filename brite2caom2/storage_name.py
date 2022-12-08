@@ -3,7 +3,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2019.                            (c) 2019.
+#  (c) 2022.                            (c) 2022.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -62,39 +62,119 @@
 #  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
 #                                       <http://www.gnu.org/licenses/>.
 #
-#  $Revision: 4 $
+#  : 4 $
 #
 # ***********************************************************************
 #
 
-from brite2caom2.storage_name import BriteName
+from os.path import basename, dirname, exists, splitext
+from caom2pipe.manage_composable import StorageName
 
 
-def test_is_valid():
-    assert BriteName('anything').is_valid()
+__all__ = ['get_entry', 'BriteName']
 
 
-def test_storage_name(test_config):
-    test_obs_id = 'HD31237_01-Ori-I-2013_BAb_setup3_APa2s5_DR2'
-    test_f_name_1 = f'{test_obs_id}.orig'
-    test_f_name_2 = f'{test_obs_id}.avedb'
-    test_uri_1 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_1}'
-    test_uri_2 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_2}'
-    for entry in [
-        test_f_name_1,
-        test_f_name_2,
-        test_uri_1,
-        test_uri_2,
-        f'https://localhost:8020/{test_f_name_1}',
-        f'https://localhost:8020/{test_f_name_2}',
-        f'vos:goliaths/brite/{test_f_name_1}',
-        f'vos:goliaths/brite/{test_f_name_2}',
-    ]:
-        test_subject = BriteName(entry)
-        assert test_subject.obs_id == test_obs_id, 'wrong obs id'
-        assert test_subject.source_names == [entry], 'wrong source names'
-        assert (
-            test_subject.destination_uris
-            == [f'{test_config.scheme}:{test_config.collection}/{test_subject.file_name}']
-        ), f'wrong decorrelated uris {test_subject.destination_uris}'
-        assert test_subject.product_id == 'timeseries', 'wrong product id'
+class BriteName(StorageName):
+    """
+    For the decorrelated planes, need to have the content of multiple files to generate the previews, so implement
+    this class to collect the artifacts by plane product ID. This decision is captured in how _source_names and
+    _destination_uris are set.
+    """
+
+    def __init__(self, entry):
+        super().__init__(
+            file_name=basename(entry),
+            source_names=[entry],
+        )
+
+    @property
+    def average_uri(self):
+        return self._get_uri(f'{self._obs_id}.avedb', StorageName.scheme)
+
+    @property
+    def decorrelated_uri(self):
+        return self._get_uri(f'{self._obs_id}.ndatdb', StorageName.scheme)
+
+    @property
+    def has_decorrelated_metadata(self):
+        return self._file_name.endswith('.ndatdb')
+
+    @property
+    def has_undecorrelated_metadata(self):
+        return self._file_name.endswith('.orig')
+
+    @property
+    def has_data(self):
+        return (
+            self._file_name.endswith('.orig')
+            or self._file_name.endswith('.ndatdb')
+            or self._file_name.endswith('.avedb')
+        )
+
+    @property
+    def is_last_to_ingest(self):
+        return self._file_name.endswith('.rlogdb')
+
+    @property
+    def prev(self):
+        result = f'{self._obs_id}_prev.jpg'
+        if self.has_undecorrelated_metadata:
+            result = f'{self._obs_id}_un_prev.jpg'
+        return result
+
+    @property
+    def thumb(self):
+        result = f'{self._obs_id}_prev_256.jpg'
+        if self.has_undecorrelated_metadata:
+            result = f'{self._obs_id}_un_prev_256.jpg'
+        return result
+
+    def is_valid(self):
+        return True
+
+    def use_different_file(self, original_extension, new_extension):
+        """
+        Common code to refer to a different file than the one currently being processed.
+        :return:
+        """
+        new_fqn = self._source_names[0].replace(original_extension, new_extension)
+        new_uri = self._get_uri(basename(new_fqn), StorageName.scheme)
+        return new_fqn, new_uri
+
+    def set_file_id(self):
+        self._file_id = BriteName.remove_extensions(self._file_name)
+
+    def set_product_id(self):
+        # DB 07-12-22
+        self._product_id = 'timeseries'
+
+    @staticmethod
+    def remove_extensions(f_name):
+        return splitext(f_name)[0]
+
+    @staticmethod
+    def is_archived(file_name):
+        # files whose purpose is other than storage/ingestion at CADC
+        return not (file_name.endswith('.lst') or file_name.endswith('.md5'))
+
+
+def get_entry(sn, original_extension, new_extension, clients, metadata_reader):
+    """
+    Common code to retrieve and reference a different file than the one currently being processed in the collection
+    of 5 that make up a BRITE-Constellation Observation.
+
+    This happens because the unit of work for any pipeline is a file, but the BRITE-Constellation plane- and
+    artifact-level metadata obtain most of their metadata and data from the .orig file, with a few exceptions:
+      - the TemporalWCS metadata for the decorrelated plane
+      - the previews for the decorrelated plane require data from two files
+    """
+    fqn, uri = sn.use_different_file(original_extension, new_extension)
+    if dirname(fqn) is None or dirname(fqn) == '':
+        fqn = f'./{fqn}'
+    # retrieve the file if it doesn't already exist - e.g. if re-ingesting files/observations
+    if not exists(fqn) and clients is not None:
+        clients.data_client.get(dirname(fqn), uri)
+    # retrieve the file metadata if it doesn't already exist
+    with open(fqn) as f:
+        metadata_reader._read_file(f, uri)
+    return uri, fqn

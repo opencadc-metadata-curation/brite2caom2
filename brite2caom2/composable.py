@@ -72,7 +72,7 @@ Implements the default entry point functions for the workflow
 application.
 
 'run' executes based on either provided lists of work, or files on disk.
-'run_by_state' executes incrementally, usually based on time-boxed 
+'run_incremental' executes incrementally, usually based on time-boxed
 intervals.
 """
 
@@ -80,13 +80,69 @@ import logging
 import sys
 import traceback
 
-from caom2pipe import run_composable as rc
-from brite2caom2 import fits2caom2_augmentation
+from caom2pipe.client_composable import ClientCollection
+from caom2pipe.manage_composable import Config, StorageName
+from caom2pipe.name_builder_composable import EntryBuilder
+from caom2pipe.run_composable import common_runner_init, run_by_state, run_by_todo, TodoRunner
+from caom2pipe.transfer_composable import modify_transfer_factory, store_transfer_factory
 
+from brite2caom2 import data_source, main_app, reader, storage_name
+from brite2caom2 import fits2caom2_augmentation, preview_augmentation
 
-BRITE_BOOKMARK = 'brite_timestmap'
-META_VISITORS = [fits2caom2_augmentation]
+BRITE_BOOKMARK = 'brite_timestamp'
+META_VISITORS = [fits2caom2_augmentation, preview_augmentation]
 DATA_VISITORS = []
+
+
+"""
+How to handle the metadata_reader:
+- because the data are not in FITS formats, there will always be a reader
+"""
+
+
+class BriteTodoRunner(TodoRunner):
+    """Specialize the handling of the complete record count, because there are sentinel files that must be present
+    before storage/ingestion can take place, although the sentinel files themselves are not archived.
+    """
+
+    def __init__(self, config, organizer, builder, source, metadata_reader, observable, reporter):
+        super().__init__(config, organizer, builder, source, metadata_reader, observable, reporter)
+
+    def _build_todo_list(self):
+        """
+        This is where the initial record count is set for the summary report, and because some BRITE-Constellation
+        files are tracked for failure/success, but are not processed, that requires different handling.
+        """
+        self._logger.debug(f'Begin _build_todo_list with {self._data_source.__class__.__name__}.')
+        # the initial directory listing
+        self._data_source.get_work()
+        # check to make sure all seven files per Observation are present - files may be moved to failure here, without
+        # being tracked in the 'complete record count'
+        self._data_source.group_work_by_obs()
+        self._todo_list = self._data_source._work
+        self._organizer.complete_record_count = len(self._todo_list)
+        self._logger.info(f'Processing {self._organizer.complete_record_count} records.')
+        # remove the sentinel files from the list of work to be done, and put those files in the success location
+        self._data_source.remove_unarchived()
+        self._logger.debug('End _build_todo_list.')
+
+
+def _common_init():
+    config = Config()
+    config.get_executors()
+    builder = EntryBuilder(storage_name.BriteName)
+    StorageName.collection = config.collection
+    clients = ClientCollection(config)
+    source = None
+    if config.use_local_files:
+        metadata_reader = reader.BriteFileMetadataReader()
+        source = data_source.BriteLocalFilesDataSource(
+            config, clients.data_client, metadata_reader, config.recurse_data_sources
+        )
+    else:
+        metadata_reader = reader.BriteStorageClientMetadataReader(clients.data_client)
+    logging.getLogger('matplotlib').setLevel(logging.ERROR)
+    return config, builder, clients, metadata_reader, source
 
 
 def _run():
@@ -96,13 +152,51 @@ def _run():
     :return 0 if successful, -1 if there's any sort of failure. Return status
         is used by airflow for task instance management and reporting.
     """
-    return rc.run_by_todo(
-        config=None, 
-        name_builder=None, 
-        meta_visitors=META_VISITORS,
-        data_visitors=DATA_VISITORS, 
-        chooser=None,
-    )
+    config, builder, clients, metadata_reader, source = _common_init()
+    if config.use_local_files:
+        modify_transfer = modify_transfer_factory(config, clients)
+        store_transfer = store_transfer_factory(config, clients)
+        (
+            config,
+            clients,
+            name_builder,
+            source,
+            metadata_reader,
+            organizer,
+            observable,
+            reporter,
+        ) = common_runner_init(
+            config,
+            clients,
+            builder,
+            source,
+            modify_transfer,
+            metadata_reader,
+            False,
+            store_transfer,
+            META_VISITORS,
+            DATA_VISITORS,
+            None,
+            main_app.APPLICATION,
+        )
+
+        runner = BriteTodoRunner(
+            config, organizer, name_builder, source, metadata_reader, observable, reporter
+        )
+        result = runner.run()
+        result |= runner.run_retry()
+        runner.report()
+    else:
+        result = run_by_todo(
+            config=config,
+            name_builder=builder,
+            source=source,
+            meta_visitors=[],
+            data_visitors=META_VISITORS,  # because there's no fhead for text files
+            clients=clients,
+            metadata_reader=metadata_reader,
+        )
+    return result
 
 
 def run():
@@ -121,15 +215,15 @@ def _run_state():
     """Uses a state file with a timestamp to control which entries will be
     processed.
     """
-    return rc.run_by_state_ts(
-        config=None, 
-        name_builder=None,
+    config, builder, clients, metadata_reader, files_source = _common_init()
+    return run_by_state(
+        name_builder=builder,
         bookmark_name=BRITE_BOOKMARK,
         meta_visitors=META_VISITORS,
-        data_visitors=DATA_VISITORS, 
-        end_time=None,
-        source=None, 
-        chooser=None,
+        data_visitors=DATA_VISITORS,
+        source=files_source,
+        clients=clients,
+        metadata_reader=metadata_reader,
     )
 
 

@@ -6,24 +6,37 @@ working_directory: /usr/src/app
 # One of netrc_filename or proxy_filename must have a value.
 proxy_file_name: /usr/src/app/cadcproxy.pem
 # operational value is ivo://cadc.nrc.ca/ams
-# - modifies entries on sc2.canfar.net
-resource_id: ivo://cadc.nrc.ca/sc2repo
+# resource_id: ivo://cadc.nrc.ca/sc2repo
+resource_id: ivo://cadc.nrc.ca/ams
 # operational value is ivo://cadc.nrc.ca/ams/brite
 # - queries entries on sc2.canfar.net
-tap_id: ivo://cadc.nrc.ca/sc2tap
+# tap_id: ivo://cadc.nrc.ca/sc2tap
+tap_id: ivo://cadc.nrc.ca/ams/brite
 # file that contains the list of entries to process
 todo_file_name: todo.txt
 data_sources:
-  - vos:test
+  - /data
 data_source_extensions:
-  - .fits
+  - .avedb 
+  - .freq0db
+  - .lst
+  - .md5
+  - .ndatdb
+  - .orig
+  - .rlogdb
+cleanup_files_when_storing: True
+cleanup_failure_destination: /data/failure
+cleanup_success_destination: /data/success
+store_modified_files_only: True
+storage_inventory_resource_id: ivo://cadc.nrc.ca/cadc/minoc
+recurse_data_sources: True
 # values True False
 # when True, the application will look for files with
 # .fits, .gz, .json endings as defining the work to be 
 # done.
 use_local_files: True
 # values DEBUG INFO WARNING ERROR
-logging_level: DEBUG
+logging_level: INFO
 # values True False
 log_to_file: True
 # fully qualified name for a directory to write log files
@@ -48,7 +61,7 @@ retry_file_name: retries.txt
 # this file is created in the logs directory, default is 'progress.txt'
 progress_file_name: progress.txt
 #
-collection: BRITE
+collection: BRITE-Constellation
 #
 # CADC service execution metrics
 #
@@ -78,6 +91,5 @@ interval: 600
 # - ingest - read the headers, write the xml to the endpoint found by resource_id
 # - modify - create a footprint and previews for an existing CAOM model record
 task_types: 
+  - store
   - ingest
-features:
-  supports_latest_client: True

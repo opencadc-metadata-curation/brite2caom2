@@ -3,7 +3,7 @@
 # ******************  CANADIAN ASTRONOMY DATA CENTRE  *******************
 # *************  CENTRE CANADIEN DE DONNÉES ASTRONOMIQUES  **************
 #
-#  (c) 2019.                            (c) 2019.
+#  (c) 2022.                            (c) 2022.
 #  Government of Canada                 Gouvernement du Canada
 #  National Research Council            Conseil national de recherches
 #  Ottawa, Canada, K1A 0R6              Ottawa, Canada, K1A 0R6
@@ -62,39 +62,58 @@
 #  <http://www.gnu.org/licenses/>.      pas le cas, consultez :
 #                                       <http://www.gnu.org/licenses/>.
 #
-#  $Revision: 4 $
+#  : 4 $
 #
 # ***********************************************************************
 #
 
-from brite2caom2.storage_name import BriteName
+import glob
+from os.path import basename
+
+from caom2pipe.caom_composable import get_all_artifact_keys
+from caom2pipe import manage_composable as mc
+
+import brite2caom2.storage_name
+from brite2caom2 import preview_augmentation, reader
+from mock import Mock, patch
+import test_main_app
 
 
-def test_is_valid():
-    assert BriteName('anything').is_valid()
+def pytest_generate_tests(metafunc):
+    obs_id_list = [ii for ii in glob.glob(f'{test_main_app.TEST_DATA_DIR}/*') if '.expected.xml' in ii]
+    metafunc.parametrize('test_name', obs_id_list)
 
 
-def test_storage_name(test_config):
-    test_obs_id = 'HD31237_01-Ori-I-2013_BAb_setup3_APa2s5_DR2'
-    test_f_name_1 = f'{test_obs_id}.orig'
-    test_f_name_2 = f'{test_obs_id}.avedb'
-    test_uri_1 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_1}'
-    test_uri_2 = f'{test_config.scheme}/{test_config.collection}/{test_f_name_2}'
-    for entry in [
-        test_f_name_1,
-        test_f_name_2,
-        test_uri_1,
-        test_uri_2,
-        f'https://localhost:8020/{test_f_name_1}',
-        f'https://localhost:8020/{test_f_name_2}',
-        f'vos:goliaths/brite/{test_f_name_1}',
-        f'vos:goliaths/brite/{test_f_name_2}',
-    ]:
-        test_subject = BriteName(entry)
-        assert test_subject.obs_id == test_obs_id, 'wrong obs id'
-        assert test_subject.source_names == [entry], 'wrong source names'
-        assert (
-            test_subject.destination_uris
-            == [f'{test_config.scheme}:{test_config.collection}/{test_subject.file_name}']
-        ), f'wrong decorrelated uris {test_subject.destination_uris}'
-        assert test_subject.product_id == 'timeseries', 'wrong product id'
+@patch('caom2pipe.client_composable.ClientCollection')
+def test_preview_visit(clients_mock, test_name, test_config):
+    obs_id = basename(test_name).replace('.expected.xml', '')
+    dir_name = obs_id.split('_')[0]
+    rlog_fqn = f'{test_main_app.TEST_DATA_DIR}/{dir_name}/{obs_id}.rlogdb'
+    metadata_reader = reader.BriteFileMetadataReader()
+    test_obs = mc.read_obs_from_file(test_name)
+    # pre-condition
+    uris = get_all_artifact_keys(test_obs)
+    assert len(uris) == 5, f'precondition failure {test_name}'
+    test_storage_name = brite2caom2.storage_name.BriteName(rlog_fqn)
+    metadata_reader.set(test_storage_name)
+    kwargs = {
+        'working_directory': test_main_app.TEST_DATA_DIR,
+        'cadc_client': None,
+        'metadata_reader': metadata_reader,
+        'observable': Mock(),
+        'storage_name': test_storage_name,
+    }
+    test_obs = preview_augmentation.visit(test_obs, **kwargs)
+    assert test_obs is not None, f'visit broken for {test_name}'
+    uris = get_all_artifact_keys(test_obs)
+    assert len(uris) == 7, f'no preview artifacts added {test_name}'
+    # there's a thumbnail and a preview
+    preview_found = False
+    thumbnail_found = False
+    for uri in uris:
+        if uri.endswith('_prev.jpg'):
+            preview_found = True
+        if uri.endswith('_prev_256.jpg'):
+            thumbnail_found = True
+    assert preview_found, f'expect a preview artifact {rlog_fqn}'
+    assert thumbnail_found, f'expect a thumbnail artifact {rlog_fqn}'
