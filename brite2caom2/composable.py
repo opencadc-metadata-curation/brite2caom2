@@ -89,7 +89,7 @@ from caom2pipe.transfer_composable import modify_transfer_factory, store_transfe
 from brite2caom2 import data_source, main_app, reader, storage_name
 from brite2caom2 import fits2caom2_augmentation, preview_augmentation
 
-BRITE_BOOKMARK = 'brite_timestmap'
+BRITE_BOOKMARK = 'brite_timestamp'
 META_VISITORS = [fits2caom2_augmentation, preview_augmentation]
 DATA_VISITORS = []
 
