@@ -1,0 +1,20 @@
+name: BRITE CAOM-2 image build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  #
+  # Package jobs
+  #
+  package:
+    uses: ./.github/workflows/docker.yml
+    secrets: inherit
+    with:
+      name: brite2caom2
+
+#
+# End Package Jobs
+#
