@@ -11,7 +11,7 @@ In an empty directory (the 'working directory'), on a machine with Docker instal
 
 ### Credentials
 
-1. The `brite_run*.sh` scripts described later will attempt to copy `$HOME/.ssl/cadcproxy.pem` to the 'working directory'. Run the following command to create that file. You will be prompted for the password, unless you have an appropriately configured `.netrc` file:
+1. Run the following command to create a proxy certificate. You will be prompted for the password:
 
    ```
    docker run --rm -ti -v ${PWD}:/usr/src/app opencadc/brite2caom2 cadc-get-cert --cert-filename /usr/src/app/cadcproxy.pem --days-valid 10 -u <CADC User Name here>
