@@ -214,6 +214,7 @@ def _run_state():
     """
     config, builder, clients, metadata_reader, files_source = _common_init()
     return run_by_state(
+        config=config,
         name_builder=builder,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS,
