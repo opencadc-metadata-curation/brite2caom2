@@ -81,10 +81,7 @@ from datetime import datetime
 from brite2caom2.storage_name import get_entry, BriteName
 
 
-__all__ = ['APPLICATION', 'mapping_factory']
-
-
-APPLICATION = 'brite2caom2'
+__all__ = ['mapping_factory']
 
 
 class BriteMapping(cc.TelescopeMapping):
@@ -96,11 +93,11 @@ class BriteMapping(cc.TelescopeMapping):
         super().__init__(storage_name, headers=[], clients=clients)
         self._metadata_reader = metadata_reader
 
-    def accumulate_blueprint(self, bp, application=None):
+    def accumulate_blueprint(self, bp):
         """Configure the telescope-specific ObsBlueprint at the CAOM model
         Observation level."""
         self._logger.debug('Begin accumulate_blueprint.')
-        super().accumulate_blueprint(bp, APPLICATION)
+        super().accumulate_blueprint(bp)
 
         # mapping by @dbohlender
         # DB 26-10-22
@@ -190,11 +187,11 @@ class BriteUndecorrelatedMapping(BriteMapping):
         super().__init__(storage_name, metadata_reader, clients)
         self._md_ptr = self._metadata_reader.metadata[self._storage_name.file_uri]
 
-    def accumulate_blueprint(self, bp, application=None):
+    def accumulate_blueprint(self, bp):
         """Configure the telescope-specific ObsBlueprint at the CAOM model
         Observation level."""
         self._logger.debug('Begin accumulate_blueprint.')
-        super().accumulate_blueprint(bp, APPLICATION)
+        super().accumulate_blueprint(bp)
 
         # mapping by @dbohlender
         object_metadata = self._md_ptr.get('StarInFo').split(',')
@@ -318,7 +315,7 @@ class BriteDecorrelatedMapping(BriteUndecorrelatedMapping):
         # do the things necessary to read the metadata for the .orig file, which is the origin of most of
         # the Observation content, except for the TemporalWCS start/stop times
         orig_uri, new_fqn = get_entry(self._storage_name, '.ndatdb', '.orig', self._clients, self._metadata_reader)
-        self._logger.debug('Add .orig URI to MetadataReader.')
+        self._logger.debug(f'Add .orig URI {orig_uri} to MetadataReader.')
         self._md_ptr = self._metadata_reader.metadata[orig_uri]
 
     def _get_time_axis_range_end_val(self, ext):

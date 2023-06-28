@@ -67,11 +67,11 @@
 # ***********************************************************************
 #
 
-from collections import Counter, deque
+from collections import Counter
 from datetime import datetime
 from os.path import basename
 
-from caom2pipe.data_source_composable import DataSource, LocalFilesDataSource
+from caom2pipe.data_source_composable import LocalFilesDataSource
 
 from brite2caom2.storage_name import BriteName
 

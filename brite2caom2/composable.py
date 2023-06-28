@@ -86,10 +86,9 @@ from caom2pipe.name_builder_composable import EntryBuilder
 from caom2pipe.run_composable import common_runner_init, run_by_state, run_by_todo, TodoRunner
 from caom2pipe.transfer_composable import modify_transfer_factory, store_transfer_factory
 
-from brite2caom2 import data_source, main_app, reader, storage_name
+from brite2caom2 import data_source, reader, storage_name
 from brite2caom2 import fits2caom2_augmentation, preview_augmentation
 
-BRITE_BOOKMARK = 'brite_timestamp'
 META_VISITORS = [fits2caom2_augmentation, preview_augmentation]
 DATA_VISITORS = []
 
@@ -108,22 +107,22 @@ class BriteTodoRunner(TodoRunner):
     def __init__(self, config, organizer, builder, source, metadata_reader, observable, reporter):
         super().__init__(config, organizer, builder, source, metadata_reader, observable, reporter)
 
-    def _build_todo_list(self):
+    def _build_todo_list(self, data_source):
         """
         This is where the initial record count is set for the summary report, and because some BRITE-Constellation
         files are tracked for failure/success, but are not processed, that requires different handling.
         """
-        self._logger.debug(f'Begin _build_todo_list with {self._data_source.__class__.__name__}.')
+        self._logger.debug(f'Begin _build_todo_list with {data_source.__class__.__name__}.')
         # the initial directory listing
-        self._data_source.get_work()
+        data_source.get_work()
         # check to make sure all seven files per Observation are present - files may be moved to failure here, without
         # being tracked in the 'complete record count'
-        self._data_source.group_work_by_obs()
-        self._todo_list = self._data_source._work
+        data_source.group_work_by_obs()
+        self._todo_list = data_source._work
         self._organizer.complete_record_count = len(self._todo_list)
         self._logger.info(f'Processing {self._organizer.complete_record_count} records.')
         # remove the sentinel files from the list of work to be done, and put those files in the success location
-        self._data_source.remove_unarchived()
+        data_source.remove_unarchived()
         self._logger.debug('End _build_todo_list.')
 
 
@@ -160,7 +159,7 @@ def _run():
             config,
             clients,
             name_builder,
-            source,
+            sources,
             metadata_reader,
             organizer,
             observable,
@@ -169,7 +168,7 @@ def _run():
             config,
             clients,
             builder,
-            source,
+            [source],
             modify_transfer,
             metadata_reader,
             False,
@@ -177,11 +176,10 @@ def _run():
             META_VISITORS,
             DATA_VISITORS,
             None,
-            main_app.APPLICATION,
         )
 
         runner = BriteTodoRunner(
-            config, organizer, name_builder, source, metadata_reader, observable, reporter
+            config, organizer, name_builder, sources, metadata_reader, observable, reporter
         )
         result = runner.run()
         result |= runner.run_retry()
@@ -190,7 +188,6 @@ def _run():
         result = run_by_todo(
             config=config,
             name_builder=builder,
-            source=source,
             meta_visitors=[],
             data_visitors=META_VISITORS,  # because there's no fhead for text files
             clients=clients,
@@ -218,10 +215,9 @@ def _run_state():
     config, builder, clients, metadata_reader, files_source = _common_init()
     return run_by_state(
         name_builder=builder,
-        bookmark_name=BRITE_BOOKMARK,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS,
-        source=files_source,
+        sources=[files_source],
         clients=clients,
         metadata_reader=metadata_reader,
     )
