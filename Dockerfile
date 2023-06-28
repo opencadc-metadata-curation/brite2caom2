@@ -19,7 +19,7 @@ RUN git clone https://github.com/${OPENCADC_REPO}/caom2tools.git && \
     pip install ./caom2utils && \
     cd ..
 
-RUN pip install git+https://github.com/${OPENCADC_REPO}/caom2pipe@${OPENCADC_BRANCH}#egg=caom2pipe
+RUN pip install git+https://github.com/${OPENCADC_REPO}/caom2pipe@${OPENCADC_MAIN_BRANCH}#egg=caom2pipe
 
 RUN pip install git+https://github.com/${OPENCADC_REPO}/brite2caom2@${OPENCADC_MAIN_BRANCH}#egg=brite2caom2
 
