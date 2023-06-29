@@ -132,16 +132,17 @@ def _common_init():
     builder = EntryBuilder(storage_name.BriteName)
     StorageName.collection = config.collection
     clients = ClientCollection(config)
-    source = None
+    sources = []
     if config.use_local_files:
         metadata_reader = reader.BriteFileMetadataReader()
         source = data_source.BriteLocalFilesDataSource(
             config, clients.data_client, metadata_reader, config.recurse_data_sources
         )
+        sources.append(source)
     else:
         metadata_reader = reader.BriteStorageClientMetadataReader(clients.data_client)
     logging.getLogger('matplotlib').setLevel(logging.ERROR)
-    return config, builder, clients, metadata_reader, source
+    return config, builder, clients, metadata_reader, sources
 
 
 def _run():
@@ -151,7 +152,7 @@ def _run():
     :return 0 if successful, -1 if there's any sort of failure. Return status
         is used by airflow for task instance management and reporting.
     """
-    config, builder, clients, metadata_reader, source = _common_init()
+    config, builder, clients, metadata_reader, sources = _common_init()
     if config.use_local_files:
         modify_transfer = modify_transfer_factory(config, clients)
         store_transfer = store_transfer_factory(config, clients)
@@ -168,7 +169,7 @@ def _run():
             config,
             clients,
             builder,
-            [source],
+            sources,
             modify_transfer,
             metadata_reader,
             False,
@@ -212,13 +213,13 @@ def _run_state():
     """Uses a state file with a timestamp to control which entries will be
     processed.
     """
-    config, builder, clients, metadata_reader, files_source = _common_init()
+    config, builder, clients, metadata_reader, sources = _common_init()
     return run_by_state(
         config=config,
         name_builder=builder,
         meta_visitors=META_VISITORS,
         data_visitors=DATA_VISITORS,
-        sources=[files_source],
+        sources=sources,
         clients=clients,
         metadata_reader=metadata_reader,
     )
