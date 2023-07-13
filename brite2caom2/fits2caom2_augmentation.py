@@ -114,7 +114,14 @@ class BriteFits2caom2Visitor(cc.Fits2caom2Visitor):
             return caom2blueprint.BlueprintParser(blueprint, uri)
 
     def _get_mapping(self, headers):
-        return main_app.mapping_factory(self._storage_name, self._metadata_reader, self._clients, self._logger)
+        return main_app.mapping_factory(
+            self._storage_name, 
+            self._metadata_reader, 
+            self._clients, 
+            self._observable, 
+            self._observation, 
+            self._logger,
+        )
 
 
 def visit(observation, **kwargs):
