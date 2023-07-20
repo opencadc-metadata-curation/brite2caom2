@@ -81,10 +81,7 @@ from datetime import datetime
 from brite2caom2.storage_name import get_entry, BriteName
 
 
-__all__ = ['APPLICATION', 'mapping_factory']
-
-
-APPLICATION = 'brite2caom2'
+__all__ = ['mapping_factory']
 
 
 class BriteMapping(cc.TelescopeMapping):
@@ -92,15 +89,15 @@ class BriteMapping(cc.TelescopeMapping):
     The mapping for the files with no metadata.
     """
 
-    def __init__(self, storage_name, metadata_reader, clients):
-        super().__init__(storage_name, headers=[], clients=clients)
+    def __init__(self, storage_name, metadata_reader, clients, observable, observation):
+        super().__init__(storage_name, headers=[], clients=clients, observable=observable, observation=observation)
         self._metadata_reader = metadata_reader
 
-    def accumulate_blueprint(self, bp, application=None):
+    def accumulate_blueprint(self, bp):
         """Configure the telescope-specific ObsBlueprint at the CAOM model
         Observation level."""
         self._logger.debug('Begin accumulate_blueprint.')
-        super().accumulate_blueprint(bp, APPLICATION)
+        super().accumulate_blueprint(bp)
 
         # mapping by @dbohlender
         # DB 26-10-22
@@ -129,43 +126,23 @@ class BriteMapping(cc.TelescopeMapping):
             result = ProductType.SCIENCE
         return result
 
-    def update(self, observation, file_info):
+    def update(self, file_info):
         """
-        Update the Artifact file-based metadata. Override if it's necessary
-        to carry out more/different updates.
+        Update the Artifact file-based metadata. Override if it's necessary to carry out more/different updates.
 
-        :param observation: Observation instance
         :param file_info: FileInfo instance
-        :param clients: ClientCollection instance
-        :return:
         """
-        self._logger.debug(f'Begin update for {observation.observation_id}')
-        for plane in observation.planes.values():
-            if plane.product_id != self._storage_name.product_id:
-                self._logger.debug(
-                    f'Product ID is {plane.product_id} but working on {self._storage_name.product_id}. Continuing.'
-                )
-                continue
-            for artifact in plane.artifacts.values():
-                if artifact.uri != self._storage_name.file_uri or not self._storage_name.is_archived:
-                    self._logger.debug(f'{self._storage_name.file_uri} is not archived. Continuing.')
-                    continue
-                update_artifact_meta(artifact, file_info)
-                # BRITE-Constellation file extensions are pretty unique, over-ride the common code behaviour for
-                # content type
-                artifact.content_type = 'text/plain'
-                self._update_artifact(artifact)
-
-        self._update_copy_metadata(observation)
+        super().update(file_info)
+        self._update_copy_metadata()
         self._logger.debug('End update')
-        return observation
+        return self._observation
 
-    def _update_copy_metadata(self, observation):
+    def _update_copy_metadata(self):
         """
         Copy the artifact metadata for the .natdb artifact to the other artifacts.
         Skip the .orig artifact, which has its own metadata.
         """
-        plane = observation.planes['timeseries']
+        plane = self._observation.planes['timeseries']
         dat_artifact_key = self._storage_name.file_uri.split('.')[0] + '.ndatdb'
         # account for preview and thumbnail artifacts
         if dat_artifact_key in plane.artifacts.keys() and len(plane.artifacts.values()) >= 5:
@@ -186,15 +163,15 @@ class BriteUndecorrelatedMapping(BriteMapping):
     The mapping for the file with all the metadata.
     """
 
-    def __init__(self, storage_name, metadata_reader, clients):
-        super().__init__(storage_name, metadata_reader, clients)
+    def __init__(self, storage_name, metadata_reader, clients, observable, observation):
+        super().__init__(storage_name, metadata_reader, clients, observable, observation)
         self._md_ptr = self._metadata_reader.metadata[self._storage_name.file_uri]
 
-    def accumulate_blueprint(self, bp, application=None):
+    def accumulate_blueprint(self, bp):
         """Configure the telescope-specific ObsBlueprint at the CAOM model
         Observation level."""
         self._logger.debug('Begin accumulate_blueprint.')
-        super().accumulate_blueprint(bp, APPLICATION)
+        super().accumulate_blueprint(bp)
 
         # mapping by @dbohlender
         object_metadata = self._md_ptr.get('StarInFo').split(',')
@@ -313,12 +290,12 @@ class BriteDecorrelatedMapping(BriteUndecorrelatedMapping):
     The mapping for the ndatdb file which has the time metadata for the plane at calibration level 2.
     """
 
-    def __init__(self, storage_name, metadata_reader, clients):
-        super().__init__(storage_name, metadata_reader, clients)
+    def __init__(self, storage_name, metadata_reader, clients, observable, observation):
+        super().__init__(storage_name, metadata_reader, clients, observable, observation)
         # do the things necessary to read the metadata for the .orig file, which is the origin of most of
         # the Observation content, except for the TemporalWCS start/stop times
         orig_uri, new_fqn = get_entry(self._storage_name, '.ndatdb', '.orig', self._clients, self._metadata_reader)
-        self._logger.debug('Add .orig URI to MetadataReader.')
+        self._logger.debug(f'Add .orig URI {orig_uri} to MetadataReader.')
         self._md_ptr = self._metadata_reader.metadata[orig_uri]
 
     def _get_time_axis_range_end_val(self, ext):
@@ -332,14 +309,14 @@ class BriteDecorrelatedMapping(BriteUndecorrelatedMapping):
         )
 
 
-def mapping_factory(storage_name, metadata_reader, clients, logger):
+def mapping_factory(storage_name, metadata_reader, clients, observable, observation, logger):
     if BriteName.is_archived(storage_name.file_name):
         if storage_name.has_undecorrelated_metadata:
-            result = BriteUndecorrelatedMapping(storage_name, metadata_reader, clients)
+            result = BriteUndecorrelatedMapping(storage_name, metadata_reader, clients, observable, observation)
         elif storage_name.has_decorrelated_metadata:
-            result = BriteDecorrelatedMapping(storage_name, metadata_reader, clients)
+            result = BriteDecorrelatedMapping(storage_name, metadata_reader, clients, observable, observation)
         else:
-            result = BriteMapping(storage_name, metadata_reader, clients)
+            result = BriteMapping(storage_name, metadata_reader, clients, observable, observation)
         logger.debug(f'Created an instance of {type(result)} for {storage_name.file_uri}')
     else:
         logger.debug(f'Not archiving {storage_name.file_name}.')

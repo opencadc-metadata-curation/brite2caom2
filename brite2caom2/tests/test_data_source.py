@@ -71,6 +71,7 @@
 from caom2pipe.manage_composable import Config, ExecutionReporter, TaskType
 from brite2caom2.data_source import BriteLocalFilesDataSource
 
+import conftest
 import pytest
 from mock import call, Mock, patch
 
@@ -79,7 +80,7 @@ EXTENSIONS = ['.avedb', '.freq0db', '.lst', '.md5', '.ndatdb', '.orig', '.rlogdb
 
 
 @pytest.fixture
-def test_config():
+def test_config_ds():
     config = Config()
     config.logging_level = 'DEBUG'
     config.task_types = [TaskType.STORE]
@@ -90,21 +91,22 @@ def test_config():
     config.retry_failures = False
     config.data_source_extensions = EXTENSIONS
     config.data_sources = ['/test_files']
+    config.collection = conftest.COLLECTION
     return config
 
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
+def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config_ds, tmp_path):
     # all the files have yet to be stored to CADC
-    test_config.change_working_directory(tmp_path.as_posix())
+    test_config_ds.change_working_directory(tmp_path.as_posix())
 
     clients_mock.return_value.data_client.info.return_value = None
     test_reader = Mock()
     test_subject = BriteLocalFilesDataSource(
-        test_config, clients_mock.return_value.data_client, test_reader, recursive=True
+        test_config_ds, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_reporter = ExecutionReporter(test_config_ds, observable=Mock(autospec=True))
     test_subject.reporter = test_reporter
 
     # first test - five files that make up a single Observation
@@ -126,17 +128,17 @@ def test_data_source_nominal_todo_cleanup(clients_mock, move_mock, test_config, 
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
+def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_config_ds, tmp_path):
     # all the files have yet to be stored to CADC
-    test_config.change_working_directory(tmp_path.as_posix())
+    test_config_ds.change_working_directory(tmp_path.as_posix())
 
     clients_mock.return_value.data_client.info.return_value = None
 
     test_reader = Mock()
     test_subject = BriteLocalFilesDataSource(
-        test_config, clients_mock.return_value.data_client, test_reader, recursive=True
+        test_config_ds, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_reporter = ExecutionReporter(test_config_ds, observable=Mock(autospec=True))
     test_subject.reporter = test_reporter
 
     # second test - missing a file, no correct observations
@@ -173,17 +175,17 @@ def test_data_source_missing_file_todo_cleanup(clients_mock, move_mock, test_con
 
 @patch('brite2caom2.data_source.BriteLocalFilesDataSource._move_action')
 @patch('caom2pipe.client_composable.ClientCollection')
-def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config, tmp_path):
-    test_config.change_working_directory(tmp_path.as_posix())
+def test_data_source_mixed_bag_todo_cleanup(clients_mock, move_mock, test_config_ds, tmp_path):
+    test_config_ds.change_working_directory(tmp_path.as_posix())
     # all the files have yet to be stored to CADC
     clients_mock.return_value.data_client.info.return_value = None
-    test_config.cleanup_files_when_storing = False
+    test_config_ds.cleanup_files_when_storing = False
 
     test_reader = Mock()
     test_subject = BriteLocalFilesDataSource(
-        test_config, clients_mock.return_value.data_client, test_reader, recursive=True
+        test_config_ds, clients_mock.return_value.data_client, test_reader, recursive=True
     )
-    test_reporter = ExecutionReporter(test_config, observable=Mock(autospec=True), application='DEFAULT')
+    test_reporter = ExecutionReporter(test_config_ds, observable=Mock(autospec=True))
     test_subject.reporter = test_reporter
 
     # third test - one missing a file, one correct observation

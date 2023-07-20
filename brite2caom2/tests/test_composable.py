@@ -127,7 +127,7 @@ def test_run_store_ingest_by_state(
         test_config.write_to_file(test_config)
         with open(test_config.proxy_fqn, 'w') as f:
             f.write('test content')
-        mc.State.write_bookmark(test_config.state_fqn, composable.BRITE_BOOKMARK, start_time.isoformat())
+        mc.State.write_bookmark(test_config.state_fqn, test_config.bookmark, start_time)
 
         try:
             test_result = composable._run_state()
@@ -298,6 +298,7 @@ def test_run_reingest_retry(access_mock, client_mock, test_config, tmp_path):
         test_config.cleanup_files_when_storing = False
         test_config.retry_failures = True
         test_config.retry_count = 1
+        test_config.retry_decay = 0
         test_config.proxy_file_name = 'test_proxy.pem'
         test_config.write_to_file(test_config)
 
@@ -341,9 +342,14 @@ def test_run_reingest_retry(access_mock, client_mock, test_config, tmp_path):
         ), f'wrong info count {client_mock.return_value.data_client.info.call_count}'
         assert client_mock.return_value.data_client.put.called, 'put called for previews'
         assert client_mock.return_value.data_client.put.call_count == 12, 'wrong put previews call count'
+        assert client_mock.return_value.data_client.get.called, 'get should be called'
+        # 48 = 6 observation * 5 files/observation + 6 observations * 3 re-read files (.avedb, .orig, .ndatdb) / observation needing cadcget retrieval
+        assert client_mock.return_value.data_client.get.call_count == 48, 'get call count'
         assert client_mock.return_value.data_client.cadcget.called, 'cadcget should be called'
-        # 18 = 6 observations * 3 files (.avedb, .orig, .ndatdb) / observation needing cadcget retrieval
-        assert client_mock.return_value.data_client.cadcget.call_count == 18, 'cadcget call count'
+        # 12 = 6 observations * 2 files (.avedb, .ndatdb) / observation needing cadcget retrieval
+        # the get vs cadcget calls => cadcget is for the MetadataReader specialization, which does a
+        # direct call instead of using the StorageClientWrapper
+        assert client_mock.return_value.data_client.cadcget.call_count == 12, 'cadcget call count'
         # 30 = once per archived file
         assert client_mock.return_value.metadata_client.read.call_count == 30, 'meta read call count'
         assert client_mock.return_value.metadata_client.update.call_count == 30, 'meta update call count'
