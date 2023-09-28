@@ -120,6 +120,7 @@ class BriteFits2caom2Visitor(cc.Fits2caom2Visitor):
             self._clients, 
             self._observable, 
             self._observation, 
+            self._config,
             self._logger,
         )
 
