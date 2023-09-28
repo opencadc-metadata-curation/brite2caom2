@@ -111,6 +111,7 @@ class BRITEDecorrelatedPreview(mc.PreviewVisitor):
         pylab.title(obs_id, color='k', fontweight='bold')
         pylab.legend()
         pylab.savefig(self._preview_fqn, format='png')
+        pylab.close()
         return self._save_figure()
 
 

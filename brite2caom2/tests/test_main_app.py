@@ -101,6 +101,7 @@ def test_main_app(clients_mock, test_name, test_config):
         'storage_name': storage_name,
         'metadata_reader': metadata_reader,
         'clients': clients_mock,
+        'config': test_config,
     }
     expected_fqn = f'{TEST_DATA_DIR}/{storage_name.obs_id}.expected.xml'
     expected = mc.read_obs_from_file(expected_fqn)
