@@ -29,7 +29,7 @@ https://github.com/opencadc/collection2caom2/wiki/config.yml.
 1. Copy the file `config.yml` to the working directory. e.g.:
 
    ```
-   wget https://raw.github.com/opencadc/brite2caom2/master/config/config.yml
+   wget https://raw.github.com/opencadc-metadata-curation/brite2caom2/master/config/config.yml
    ```
 
 1. Tell `brite2caom2` in `config.yml` what to do with files on disk after the files have been stored to CADC:
@@ -48,8 +48,8 @@ https://github.com/opencadc/collection2caom2/wiki/config.yml.
 1. In the master branch of this repository, find the scripts directory, and copy the files `brite_run.sh`  and `brite_run_incremental.sh` to the working directory. e.g.:
 
    ```
-   wget https://raw.github.com/opencadc/brite2caom2/master/scripts/brite_run.sh
-   wget https://raw.github.com/opencadc/brite2caom2/master/scripts/brite_run_incremental.sh
+   wget https://raw.github.com/opencadc-metadata-curation/brite2caom2/master/scripts/brite_run.sh
+   wget https://raw.github.com/opencadc-metadata-curation/brite2caom2/master/scripts/brite_run_incremental.sh
    ```
 
 1. Ensure the scripts are executable:
